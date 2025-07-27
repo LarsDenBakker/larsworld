@@ -2,10 +2,40 @@
 <html>
 <head>
     <title>LarsWorld</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <h1>LarsWorld</h1>
     <div id="app">Loading...</div>
+    
+    <div id="map-section">
+        <button id="generate-map-btn">Generate Map</button>
+        <div id="map-container"></div>
+        <div id="legend">
+            <h3>Legend</h3>
+            <div class="legend-item">
+                <div class="legend-color water"></div>
+                <span>Water</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color sand"></div>
+                <span>Sand</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color grass"></div>
+                <span>Grass</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color forest"></div>
+                <span>Forest</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color mountain"></div>
+                <span>Mountain</span>
+            </div>
+        </div>
+    </div>
+    
     <script src="main.js"></script>
 </body>
 </html>

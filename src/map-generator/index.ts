@@ -265,3 +265,144 @@ export function generateMap(width: number, height: number): Tile[][] {
   
   return map;
 }
+
+export interface MapChunk {
+  startY: number;
+  endY: number;
+  chunkIndex: number;
+  totalChunks: number;
+  rows: Tile[][];
+}
+
+/**
+ * Generates a map in chunks to avoid timeouts and enable streaming
+ */
+export function generateMapChunked(
+  width: number, 
+  height: number, 
+  onChunk: (chunk: MapChunk) => void,
+  onComplete: () => void,
+  onError: (error: Error) => void
+): void {
+  try {
+    const chunkSize = 50; // Generate 50 rows at a time
+    const totalChunks = Math.ceil(height / chunkSize);
+    let currentChunk = 0;
+    
+    // Initialize noise generators with consistent seeds for coherent terrain
+    const seed = Math.random();
+    const elevationNoise = new PerlinNoise(seed);
+    const continentalNoise = new PerlinNoise(seed + 0.1);
+    const coastalNoise = new PerlinNoise(seed + 0.2);
+    const temperatureNoise = new PerlinNoise(seed + 0.3);
+    const moistureNoise = new PerlinNoise(seed + 0.4);
+    
+    // For large maps (1000x1000), use earthlike continent generation
+    const isLargeMap = width >= 1000 && height >= 1000;
+    
+    // Scale factors for noise sampling - adjusted for realistic continental features
+    const continentalScale = isLargeMap ? 0.002 : 0.01;
+    const elevationScale = isLargeMap ? 0.008 : 0.05;
+    const coastalScale = isLargeMap ? 0.02 : 0.1;
+    const temperatureScale = isLargeMap ? 0.004 : 0.02;
+    const moistureScale = isLargeMap ? 0.015 : 0.08;
+    
+    function generateNextChunk() {
+      try {
+        const startY = currentChunk * chunkSize;
+        const endY = Math.min(startY + chunkSize, height);
+        const rows: Tile[][] = [];
+        
+        for (let y = startY; y < endY; y++) {
+          const row: Tile[] = [];
+          for (let x = 0; x < width; x++) {
+            let elevation = 0;
+            
+            if (isLargeMap) {
+              // Create realistic continental patterns using layered noise
+              const continentalPattern = continentalNoise.octaveNoise(x * continentalScale, y * continentalScale, 4, 0.6);
+              const regionalElevation = elevationNoise.octaveNoise(x * elevationScale, y * elevationScale, 6, 0.5);
+              const coastalComplexity = coastalNoise.octaveNoise(x * coastalScale, y * coastalScale, 4, 0.4);
+              
+              let baseLand = continentalPattern * 0.7 + regionalElevation * 0.3;
+              baseLand += coastalComplexity * 0.15;
+              
+              elevation = (baseLand + 1) / 2;
+              elevation = Math.pow(elevation, 1.2);
+              
+              if (elevation > 0.35) {
+                elevation = 0.35 + (elevation - 0.35) * 1.4;
+                const ridgeNoise = Math.abs(elevationNoise.octaveNoise(x * elevationScale * 2, y * elevationScale * 2, 3, 0.5));
+                if (elevation > 0.6) {
+                  elevation += ridgeNoise * 0.3;
+                }
+              } else {
+                elevation = elevation * 0.8;
+              }
+            } else {
+              elevation = elevationNoise.octaveNoise(x * elevationScale, y * elevationScale, 5, 0.5);
+              elevation = (elevation + 1) / 2;
+              elevation = Math.pow(elevation, 0.8);
+              if (elevation < 0.4) {
+                elevation = elevation * 0.7;
+              }
+            }
+            
+            // Generate temperature based on latitude and elevation
+            const latitudeFactor = Math.abs((y / height) - 0.5) * 2;
+            let temperature = 1 - latitudeFactor;
+            temperature += temperatureNoise.octaveNoise(x * temperatureScale, y * temperatureScale, 2, 0.3) * 0.3;
+            temperature -= elevation * 0.4;
+            temperature = Math.max(0, Math.min(1, temperature));
+            
+            // Generate moisture patterns
+            let moisture = moistureNoise.octaveNoise(x * moistureScale, y * moistureScale, 3, 0.4);
+            moisture = (moisture + 1) / 2;
+            moisture = Math.max(0, Math.min(1, moisture));
+            
+            // Determine biome
+            const biome = getBiome(temperature, moisture, elevation);
+            
+            row.push({
+              type: biome,
+              x,
+              y,
+              elevation,
+              temperature,
+              moisture
+            });
+          }
+          rows.push(row);
+        }
+        
+        // Send chunk
+        const chunk: MapChunk = {
+          startY,
+          endY,
+          chunkIndex: currentChunk,
+          totalChunks,
+          rows
+        };
+        
+        onChunk(chunk);
+        currentChunk++;
+        
+        // Schedule next chunk or complete
+        if (currentChunk < totalChunks) {
+          // Use setTimeout to avoid blocking and allow for proper streaming
+          setTimeout(generateNextChunk, 10);
+        } else {
+          onComplete();
+        }
+      } catch (error) {
+        onError(error as Error);
+      }
+    }
+    
+    // Start generation
+    generateNextChunk();
+    
+  } catch (error) {
+    onError(error as Error);
+  }
+}

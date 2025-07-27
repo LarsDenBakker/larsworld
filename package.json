@@ -1,0 +1,24 @@
+{
+  "name": "larsworld",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A world generation game inspired by Dwarf Fortress and Minecraft.",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node --loader ts-node/esm src/index.ts",
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "game",
+    "world-generation",
+    "typescript"
+  ],
+  "author": "LarsDenBakker",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}

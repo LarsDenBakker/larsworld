@@ -8,23 +8,12 @@ router.get('/ping', (req, res) => {
   res.json({ message: 'Hello World from the local server!' });
 });
 
-// New map generation endpoint
+// New map generation endpoint - always generates 1000x1000 earthlike world
 router.post('/generate-map', (req, res) => {
   try {
-    const { width = 50, height = 50 } = req.body;
-    
-    // Validate input parameters
-    if (typeof width !== 'number' || typeof height !== 'number') {
-      return res.status(400).json({ 
-        error: 'Width and height must be numbers' 
-      });
-    }
-    
-    if (width < 10 || width > 200 || height < 10 || height > 200) {
-      return res.status(400).json({ 
-        error: 'Width and height must be between 10 and 200' 
-      });
-    }
+    // Fixed dimensions for earthlike planet simulation
+    const width = 1000;
+    const height = 1000;
     
     const map = generateMap(width, height);
     res.json({ 

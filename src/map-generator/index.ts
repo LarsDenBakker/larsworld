@@ -159,6 +159,7 @@ function getBiome(temperature: number, moisture: number, elevation: number): Til
 
 /**
  * Generates a realistic 2D map using noise-based elevation and climate simulation
+ * For 1000x1000 maps, ensures earthlike planet with at least 2 distinct continents
  */
 export function generateMap(width: number, height: number): Tile[][] {
   const map: Tile[][] = [];
@@ -168,25 +169,58 @@ export function generateMap(width: number, height: number): Tile[][] {
   const temperatureNoise = new PerlinNoise(Math.random());
   const moistureNoise = new PerlinNoise(Math.random());
   
-  // Scale factors for noise sampling
-  const elevationScale = 0.05; // Larger features
-  const temperatureScale = 0.02; // Very large climate zones
-  const moistureScale = 0.08; // Medium-sized moisture patterns
+  // For large maps (1000x1000), use continent-generating approach
+  const isLargeMap = width >= 1000 && height >= 1000;
+  
+  // Scale factors for noise sampling - adjusted for large maps
+  const elevationScale = isLargeMap ? 0.008 : 0.05; // Much larger features for big maps
+  const temperatureScale = isLargeMap ? 0.004 : 0.02; // Very large climate zones
+  const moistureScale = isLargeMap ? 0.015 : 0.08; // Medium-sized moisture patterns
+  
+  // Create continent seeds for large maps
+  const continents: Array<{x: number, y: number, radius: number, strength: number}> = [];
+  if (isLargeMap) {
+    // Place at least 2 major continents
+    continents.push(
+      { x: width * 0.25, y: height * 0.35, radius: 200, strength: 0.7 },
+      { x: width * 0.75, y: height * 0.65, radius: 180, strength: 0.65 },
+      { x: width * 0.15, y: height * 0.75, radius: 120, strength: 0.5 },
+      { x: width * 0.85, y: height * 0.25, radius: 140, strength: 0.55 }
+    );
+  }
   
   for (let y = 0; y < height; y++) {
     const row: Tile[] = [];
     for (let x = 0; x < width; x++) {
-      // Generate elevation using multi-octave noise for realistic terrain
-      let elevation = elevationNoise.octaveNoise(x * elevationScale, y * elevationScale, 4, 0.5);
+      // Generate base elevation using multi-octave noise
+      let elevation = elevationNoise.octaveNoise(x * elevationScale, y * elevationScale, 5, 0.5);
       elevation = (elevation + 1) / 2; // Normalize to 0-1
       
-      // Create more realistic land/ocean distribution
-      // Use a less aggressive bias to allow for proper oceans
-      elevation = Math.pow(elevation, 0.8); // Gentler bias toward lower elevations
-      
-      // Add some continental shelf effects - elevations rise more gradually from ocean
-      if (elevation < 0.4) {
-        elevation = elevation * 0.7; // Keep low areas lower for ocean
+      // For large maps, add continent influence
+      if (isLargeMap) {
+        let continentInfluence = 0;
+        for (const continent of continents) {
+          const dx = x - continent.x;
+          const dy = y - continent.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const influence = Math.max(0, continent.strength * (1 - distance / continent.radius));
+          continentInfluence = Math.max(continentInfluence, influence);
+        }
+        
+        // Blend continent influence with noise
+        elevation = elevation * 0.6 + continentInfluence * 0.4;
+        
+        // Ensure ocean basins between continents
+        const oceanBasinNoise = elevationNoise.octaveNoise(x * 0.003, y * 0.003, 2, 0.3);
+        if (continentInfluence < 0.1) {
+          elevation = elevation * 0.3 + (oceanBasinNoise + 1) * 0.1; // Deep ocean basins
+        }
+      } else {
+        // Original logic for smaller maps
+        elevation = Math.pow(elevation, 0.8);
+        if (elevation < 0.4) {
+          elevation = elevation * 0.7;
+        }
       }
       
       // Generate temperature based on latitude (distance from center) and elevation

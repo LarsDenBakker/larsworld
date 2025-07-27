@@ -17,6 +17,18 @@ document.addEventListener('DOMContentLoaded', () => {
   // Add map generation functionality
   generateBtn.addEventListener('click', async () => {
     try {
+      // Get width and height from input fields
+      const widthInput = document.getElementById('map-width');
+      const heightInput = document.getElementById('map-height');
+      const width = parseInt(widthInput.value) || 50;
+      const height = parseInt(heightInput.value) || 50;
+      
+      // Basic validation
+      if (width < 10 || width > 200 || height < 10 || height > 200) {
+        alert('Width and height must be between 10 and 200');
+        return;
+      }
+      
       generateBtn.disabled = true;
       generateBtn.textContent = 'Generating...';
       
@@ -26,8 +38,8 @@ document.addEventListener('DOMContentLoaded', () => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          width: 30,
-          height: 20
+          width: width,
+          height: height
         })
       });
 

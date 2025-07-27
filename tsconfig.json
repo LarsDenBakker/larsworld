@@ -3,7 +3,6 @@
     "target": "es2022",
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "rootDir": "./src",
     "outDir": "./dist",
     "strict": true,
     "esModuleInterop": true,
@@ -11,7 +10,8 @@
     "forceConsistentCasingInFileNames": true
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "netlify/functions/**/*"
   ],
   "exclude": [
     "node_modules"

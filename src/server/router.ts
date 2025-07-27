@@ -11,7 +11,7 @@ router.get('/ping', (req, res) => {
 // New map generation endpoint
 router.post('/generate-map', (req, res) => {
   try {
-    const { width = 20, height = 15 } = req.body;
+    const { width = 50, height = 50 } = req.body;
     
     // Validate input parameters
     if (typeof width !== 'number' || typeof height !== 'number') {
@@ -20,9 +20,9 @@ router.post('/generate-map', (req, res) => {
       });
     }
     
-    if (width < 1 || width > 100 || height < 1 || height > 100) {
+    if (width < 10 || width > 200 || height < 10 || height > 200) {
       return res.status(400).json({ 
-        error: 'Width and height must be between 1 and 100' 
+        error: 'Width and height must be between 10 and 200' 
       });
     }
     

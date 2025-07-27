@@ -1,18 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const appDiv = document.getElementById('app');
   const generateBtn = document.getElementById('generate-map-btn');
   const mapContainer = document.getElementById('map-container');
-
-  // Initialize the app with the existing ping functionality
-  fetch('/api/ping')
-    .then(response => response.json())
-    .then(data => {
-      appDiv.textContent = data.message;
-    })
-    .catch(error => {
-      console.error('Error fetching ping:', error);
-      appDiv.textContent = 'Failed to fetch data from server.';
-    });
 
   // Add map generation functionality
   generateBtn.addEventListener('click', async () => {

@@ -3,6 +3,19 @@
   publish = "web/"
   functions = "netlify/functions/"
 
+# Function configuration to handle large payloads
+[functions]
+  # Use esbuild for better performance and compatibility
+  node_bundler = "esbuild"
+
+# Configure specific function limits
+[functions."api"]
+  # Increase payload size limit to 25MB to handle large map generation requests
+  # Default Netlify limit is 6MB, but map data can be larger
+  max_request_body_size = "25mb"
+  # Increase timeout for map generation (default is 10s, max is 26s for free tier)
+  timeout = "26s"
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api/:splat"

@@ -29,12 +29,12 @@ router.post('/test-payload', (req, res) => {
   }
 });
 
-// New map generation endpoint - streams 1000x1000 earthlike world in chunks
+// New map generation endpoint - streams 500x500 earthlike world in chunks
 router.get('/generate-map', (req, res) => {
   try {
     // Fixed dimensions for earthlike planet simulation
-    const width = 1000;
-    const height = 1000;
+    const width = 500;
+    const height = 500;
     
     // Log map generation start with expected payload information
     console.log(`[Map Generation] Starting generation for ${width}x${height} map`);

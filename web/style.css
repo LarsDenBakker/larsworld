@@ -54,8 +54,8 @@ h1 {
 }
 
 .tile {
-  width: 16px;
-  height: 16px;
+  width: 2px;
+  height: 2px;
   display: inline-block;
 }
 
@@ -123,8 +123,8 @@ h1 {
 }
 
 .legend-color {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   border-radius: 2px;
   border: 1px solid #333;
 }

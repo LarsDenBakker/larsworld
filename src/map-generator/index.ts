@@ -159,7 +159,7 @@ function getBiome(temperature: number, moisture: number, elevation: number): Til
 
 /**
  * Generates a realistic 2D map using noise-based elevation and climate simulation
- * For 1000x1000 maps, creates earthlike planet with realistic continental shapes
+ * For 500x500+ maps, creates earthlike planet with realistic continental shapes
  */
 export function generateMap(width: number, height: number): Tile[][] {
   const map: Tile[][] = [];
@@ -171,8 +171,8 @@ export function generateMap(width: number, height: number): Tile[][] {
   const temperatureNoise = new PerlinNoise(Math.random());
   const moistureNoise = new PerlinNoise(Math.random());
   
-  // For large maps (1000x1000), use earthlike continent generation
-  const isLargeMap = width >= 1000 && height >= 1000;
+  // For large maps (500x500+), use earthlike continent generation
+  const isLargeMap = width >= 500 && height >= 500;
   
   // Scale factors for noise sampling - adjusted for realistic continental features
   const continentalScale = isLargeMap ? 0.002 : 0.01; // Very large continental patterns
@@ -297,8 +297,8 @@ export function generateMapChunked(
     const temperatureNoise = new PerlinNoise(seed + 0.3);
     const moistureNoise = new PerlinNoise(seed + 0.4);
     
-    // For large maps (1000x1000), use earthlike continent generation
-    const isLargeMap = width >= 1000 && height >= 1000;
+    // For large maps (500x500+), use earthlike continent generation
+    const isLargeMap = width >= 500 && height >= 500;
     
     // Scale factors for noise sampling - adjusted for realistic continental features
     const continentalScale = isLargeMap ? 0.002 : 0.01;

@@ -60,7 +60,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const tile = map[y][x];
         const tileElement = document.createElement('div');
         tileElement.className = `tile ${tile.type}`;
-        tileElement.title = `${tile.type} (${x}, ${y})`;
+        
+        // Enhanced tooltip with environmental data
+        const elevation = Math.round(tile.elevation * 100);
+        const temperature = Math.round(tile.temperature * 100);
+        const rainfall = Math.round(tile.rainfall * 100);
+        tileElement.title = `${tile.type} (${x}, ${y})\nElevation: ${elevation}%\nTemperature: ${temperature}%\nRainfall: ${rainfall}%`;
+        
         mapContainer.appendChild(tileElement);
       }
     }

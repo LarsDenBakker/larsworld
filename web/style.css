@@ -60,20 +60,28 @@ h1 {
 }
 
 /* Terrain colors */
-.tile.water {
+.tile.ocean {
   background-color: #1E90FF;
 }
 
-.tile.sand {
+.tile.beach {
   background-color: #F4A460;
 }
 
-.tile.grass {
-  background-color: #32CD32;
+.tile.desert {
+  background-color: #F4E99B;
+}
+
+.tile.grassland {
+  background-color: #90EE90;
 }
 
 .tile.forest {
   background-color: #228B22;
+}
+
+.tile.tundra {
+  background-color: #D2E5F4;
 }
 
 .tile.mountain {
@@ -109,20 +117,28 @@ h1 {
   border: 1px solid #333;
 }
 
-.legend-color.water {
+.legend-color.ocean {
   background-color: #1E90FF;
 }
 
-.legend-color.sand {
+.legend-color.beach {
   background-color: #F4A460;
 }
 
-.legend-color.grass {
-  background-color: #32CD32;
+.legend-color.desert {
+  background-color: #F4E99B;
+}
+
+.legend-color.grassland {
+  background-color: #90EE90;
 }
 
 .legend-color.forest {
   background-color: #228B22;
+}
+
+.legend-color.tundra {
+  background-color: #D2E5F4;
 }
 
 .legend-color.mountain {

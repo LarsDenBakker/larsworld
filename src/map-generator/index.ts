@@ -159,64 +159,77 @@ function getBiome(temperature: number, moisture: number, elevation: number): Til
 
 /**
  * Generates a realistic 2D map using noise-based elevation and climate simulation
- * For 1000x1000 maps, ensures earthlike planet with at least 2 distinct continents
+ * For 1000x1000 maps, creates earthlike planet with realistic continental shapes
  */
 export function generateMap(width: number, height: number): Tile[][] {
   const map: Tile[][] = [];
   
   // Initialize noise generators with different seeds for variety
   const elevationNoise = new PerlinNoise(Math.random());
+  const continentalNoise = new PerlinNoise(Math.random());
+  const coastalNoise = new PerlinNoise(Math.random());
   const temperatureNoise = new PerlinNoise(Math.random());
   const moistureNoise = new PerlinNoise(Math.random());
   
-  // For large maps (1000x1000), use continent-generating approach
+  // For large maps (1000x1000), use earthlike continent generation
   const isLargeMap = width >= 1000 && height >= 1000;
   
-  // Scale factors for noise sampling - adjusted for large maps
-  const elevationScale = isLargeMap ? 0.008 : 0.05; // Much larger features for big maps
-  const temperatureScale = isLargeMap ? 0.004 : 0.02; // Very large climate zones
+  // Scale factors for noise sampling - adjusted for realistic continental features
+  const continentalScale = isLargeMap ? 0.002 : 0.01; // Very large continental patterns
+  const elevationScale = isLargeMap ? 0.008 : 0.05; // Regional terrain features
+  const coastalScale = isLargeMap ? 0.02 : 0.1; // Coastal complexity
+  const temperatureScale = isLargeMap ? 0.004 : 0.02; // Large climate zones
   const moistureScale = isLargeMap ? 0.015 : 0.08; // Medium-sized moisture patterns
-  
-  // Create continent seeds for large maps
-  const continents: Array<{x: number, y: number, radius: number, strength: number}> = [];
-  if (isLargeMap) {
-    // Place at least 2 major continents
-    continents.push(
-      { x: width * 0.25, y: height * 0.35, radius: 200, strength: 0.7 },
-      { x: width * 0.75, y: height * 0.65, radius: 180, strength: 0.65 },
-      { x: width * 0.15, y: height * 0.75, radius: 120, strength: 0.5 },
-      { x: width * 0.85, y: height * 0.25, radius: 140, strength: 0.55 }
-    );
-  }
   
   for (let y = 0; y < height; y++) {
     const row: Tile[] = [];
     for (let x = 0; x < width; x++) {
-      // Generate base elevation using multi-octave noise
-      let elevation = elevationNoise.octaveNoise(x * elevationScale, y * elevationScale, 5, 0.5);
-      elevation = (elevation + 1) / 2; // Normalize to 0-1
+      let elevation = 0;
       
-      // For large maps, add continent influence
       if (isLargeMap) {
-        let continentInfluence = 0;
-        for (const continent of continents) {
-          const dx = x - continent.x;
-          const dy = y - continent.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          const influence = Math.max(0, continent.strength * (1 - distance / continent.radius));
-          continentInfluence = Math.max(continentInfluence, influence);
-        }
+        // Create realistic continental patterns using layered noise
         
-        // Blend continent influence with noise
-        elevation = elevation * 0.6 + continentInfluence * 0.4;
+        // Large-scale continental structure (major landmass placement)
+        const continentalPattern = continentalNoise.octaveNoise(x * continentalScale, y * continentalScale, 4, 0.6);
         
-        // Ensure ocean basins between continents
-        const oceanBasinNoise = elevationNoise.octaveNoise(x * 0.003, y * 0.003, 2, 0.3);
-        if (continentInfluence < 0.1) {
-          elevation = elevation * 0.3 + (oceanBasinNoise + 1) * 0.1; // Deep ocean basins
+        // Regional elevation variations
+        const regionalElevation = elevationNoise.octaveNoise(x * elevationScale, y * elevationScale, 6, 0.5);
+        
+        // Coastal complexity and irregular shapes
+        const coastalComplexity = coastalNoise.octaveNoise(x * coastalScale, y * coastalScale, 4, 0.4);
+        
+        // Combine noise layers for realistic terrain
+        // Continental pattern provides the main land/ocean distribution
+        let baseLand = continentalPattern * 0.7 + regionalElevation * 0.3;
+        
+        // Add coastal irregularity for realistic coastline shapes
+        baseLand += coastalComplexity * 0.15;
+        
+        // Normalize and adjust for earthlike land/ocean ratio (approximately 30% land)
+        elevation = (baseLand + 1) / 2; // Normalize to 0-1
+        
+        // Create more realistic elevation distribution
+        // Bias toward ocean (sea level) but allow for significant landmasses
+        elevation = Math.pow(elevation, 1.2); // Slightly favor lower elevations for more ocean
+        
+        // Enhance continental structure by strengthening land areas
+        if (elevation > 0.35) {
+          // Land areas - add more elevation variation
+          elevation = 0.35 + (elevation - 0.35) * 1.4;
+          
+          // Add mountain ranges using ridge noise
+          const ridgeNoise = Math.abs(elevationNoise.octaveNoise(x * elevationScale * 2, y * elevationScale * 2, 3, 0.5));
+          if (elevation > 0.6) {
+            elevation += ridgeNoise * 0.3; // Mountain ranges on higher terrain
+          }
+        } else {
+          // Ocean areas - keep lower but add some seafloor variation
+          elevation = elevation * 0.8;
         }
       } else {
         // Original logic for smaller maps
+        elevation = elevationNoise.octaveNoise(x * elevationScale, y * elevationScale, 5, 0.5);
+        elevation = (elevation + 1) / 2; // Normalize to 0-1
         elevation = Math.pow(elevation, 0.8);
         if (elevation < 0.4) {
           elevation = elevation * 0.7;

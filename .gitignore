@@ -13,3 +13,9 @@ pnpm-debug.log*
 # IDE configuration
 .vscode/
 .idea/
+
+# Playwright artifacts
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

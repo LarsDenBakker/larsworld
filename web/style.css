@@ -24,7 +24,46 @@ h1 {
   gap: 20px;
 }
 
-#generate-map-btn {
+#map-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  align-items: center;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.control-group {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.control-group label {
+  font-weight: bold;
+  color: #333;
+}
+
+.control-group input {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.control-group input[type="number"] {
+  width: 80px;
+}
+
+.control-group input[type="text"] {
+  width: 150px;
+}
+
+#generate-map-btn, #generate-paginated-btn {
   background-color: #4CAF50;
   color: white;
   padding: 12px 24px;
@@ -33,13 +72,22 @@ h1 {
   cursor: pointer;
   font-size: 16px;
   transition: background-color 0.3s;
+  margin: 0 10px;
+}
+
+#generate-paginated-btn {
+  background-color: #2563eb;
 }
 
 #generate-map-btn:hover {
   background-color: #45a049;
 }
 
-#generate-map-btn:disabled {
+#generate-paginated-btn:hover {
+  background-color: #1d4ed8;
+}
+
+#generate-map-btn:disabled, #generate-paginated-btn:disabled {
   background-color: #cccccc;
   cursor: not-allowed;
 }

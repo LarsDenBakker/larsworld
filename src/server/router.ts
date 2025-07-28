@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { generateMapChunked } from '../map-generator/index.js';
+import { generateMapPage, validateMapPageRequest } from '../map-generator/paginated.js';
+import { MapPageRequest, ApiError } from '../shared/types.js';
 
 const router = Router();
 
@@ -26,6 +28,57 @@ router.post('/test-payload', (req, res) => {
       error: 'Failed to process payload',
       details: errorMessage 
     });
+  }
+});
+
+// New paginated map generation endpoint
+router.get('/map', (req, res) => {
+  try {
+    // Parse query parameters
+    const page = parseInt(req.query.page as string) || 0;
+    const pageSize = parseInt(req.query.pageSize as string) || 64;
+    const width = parseInt(req.query.width as string) || 256;
+    const height = parseInt(req.query.height as string) || 256;
+    const seed = req.query.seed as string || 'default';
+
+    const request: MapPageRequest = {
+      page,
+      pageSize,
+      width,
+      height,
+      seed
+    };
+
+    console.log(`[Paginated Map] Request: page=${page}, pageSize=${pageSize}, width=${width}, height=${height}, seed=${seed}`);
+
+    // Validate request
+    validateMapPageRequest(request);
+
+    // Generate the requested page
+    const startTime = Date.now();
+    const response = generateMapPage(request);
+    const duration = Date.now() - startTime;
+
+    console.log(`[Paginated Map] Generated page ${page} in ${duration}ms, size: ${Math.round(response.sizeBytes / 1024)}KB`);
+
+    // Check if payload exceeds 6MB limit
+    if (response.sizeBytes > 6 * 1024 * 1024) {
+      const error: ApiError = {
+        error: 'Payload too large',
+        details: `Generated ${Math.round(response.sizeBytes / 1024 / 1024 * 100) / 100}MB, exceeds 6MB limit`
+      };
+      return res.status(413).json(error);
+    }
+
+    res.json(response);
+
+  } catch (error) {
+    console.error('[Paginated Map] Error:', error);
+    const apiError: ApiError = {
+      error: 'Map generation failed',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    };
+    res.status(400).json(apiError);
   }
 });
 

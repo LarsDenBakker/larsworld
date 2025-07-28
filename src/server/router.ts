@@ -30,6 +30,68 @@ router.post('/test-payload', (req, res) => {
   }
 });
 
+// Simple test endpoint for small map generation
+router.get('/test-map', async (req, res) => {
+  try {
+    // Import generateMap for testing
+    const { generateMap } = await import('../map-generator/index.js');
+    
+    // Generate a small test map
+    const width = parseInt(req.query.width as string) || 50;
+    const height = parseInt(req.query.height as string) || 50;
+    
+    // Limit to reasonable test sizes
+    if (width > 100 || height > 100) {
+      return res.status(400).json({ error: 'Test maps limited to 100x100 for performance' });
+    }
+    
+    console.log(`[Test Map] Generating ${width}x${height} test map...`);
+    const startTime = Date.now();
+    
+    const map = generateMap(width, height);
+    
+    const duration = Date.now() - startTime;
+    
+    // Count biomes
+    const biomeCounts: Record<string, number> = {};
+    let edgeOceanCount = 0;
+    let totalEdges = 0;
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const biome = map[y][x].type;
+        biomeCounts[biome] = (biomeCounts[biome] || 0) + 1;
+        
+        // Check if this is an edge tile
+        if (x === 0 || x === width - 1 || y === 0 || y === height - 1) {
+          totalEdges++;
+          if (biome === 'ocean') {
+            edgeOceanCount++;
+          }
+        }
+      }
+    }
+    
+    console.log(`[Test Map] Generated in ${duration}ms, ${edgeOceanCount}/${totalEdges} edges are ocean`);
+    
+    res.json({
+      width,
+      height,
+      generationTime: duration,
+      biomeCounts,
+      edgeOceanRatio: edgeOceanCount / totalEdges,
+      allEdgesOcean: edgeOceanCount === totalEdges
+    });
+    
+  } catch (error) {
+    console.error('[Test Map] Error:', error);
+    res.status(500).json({ 
+      error: 'Test map generation failed',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Paginated map generation endpoint
 router.get('/map', (req, res) => {
   try {

@@ -11,6 +11,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const currentSeedSpan = document.getElementById('current-seed');
   const copySeedBtn = document.getElementById('copy-seed');
 
+  // Add preset button functionality
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const width = btn.dataset.width;
+      const height = btn.dataset.height;
+      if (width && height) {
+        widthInput.value = width;
+        heightInput.value = height;
+      }
+    });
+  });
+
   // Generate random seed function
   function generateRandomSeed() {
     const adjectives = ['brave', 'mystic', 'ancient', 'golden', 'silver', 'crystal', 'shadow', 'blazing', 'frozen', 'emerald'];

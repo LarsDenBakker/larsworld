@@ -87,14 +87,14 @@ class DeterministicPerlinNoise {
 
 /**
  * Determines biome based on temperature, moisture, and elevation
- * Updated for clearer ocean/land separation and new water types
+ * Enhanced for more realistic climate-based biome distribution
  */
 function getBiome(temperature: number, moisture: number, elevation: number, isRiver: boolean = false, isLake: boolean = false): BiomeType {
   // Rivers and lakes override other biomes (except ocean)
   if (isRiver && elevation >= 0.2) return 'river';
   if (isLake && elevation >= 0.25) return 'lake';
   
-  // Ocean and shallow water based on elevation - adjusted for clearer separation
+  // Ocean and shallow water based on elevation
   if (elevation < 0.3) {
     return elevation < 0.2 ? 'ocean' : 'shallow_water';
   }
@@ -104,38 +104,77 @@ function getBiome(temperature: number, moisture: number, elevation: number, isRi
     return 'beach';
   }
   
-  // Snow-capped mountains
+  // High elevation biomes (mountains and snow)
   if (elevation > 0.85) {
     return 'snow';
   }
-  
-  // High mountains
   if (elevation > 0.75) {
-    return 'mountain';
+    return temperature < 0.3 ? 'snow' : 'mountain';
   }
   
-  // Tundra in cold areas
-  if (temperature < 0.25) {
+  // Temperature-based biome determination with elevation effects
+  
+  // Very cold areas (polar/high elevation)
+  if (temperature < 0.2) {
     return 'tundra';
   }
   
-  // Desert in hot, dry areas
-  if (temperature > 0.7 && moisture < 0.4) {
-    return 'desert';
+  // Cold areas
+  if (temperature < 0.35) {
+    return moisture > 0.5 ? 'tundra' : 'tundra';
   }
   
-  // Swamp in hot, very wet areas with low elevation
-  if (temperature > 0.6 && moisture > 0.8 && elevation < 0.5) {
-    return 'swamp';
+  // Hot areas - more nuanced desert/dry biome logic
+  if (temperature > 0.75) {
+    if (moisture < 0.2) {
+      return 'desert';
+    } else if (moisture < 0.4) {
+      return elevation > 0.5 ? 'desert' : 'grassland';
+    } else if (moisture > 0.8 && elevation < 0.5) {
+      return 'swamp';
+    } else if (moisture > 0.6) {
+      return 'forest';
+    } else {
+      return 'grassland';
+    }
   }
   
-  // Forest in moderate to high moisture
+  // Moderate temperature areas - more realistic moisture gradients
+  if (temperature > 0.6) {
+    if (moisture < 0.25) {
+      return 'desert';
+    } else if (moisture < 0.45) {
+      return 'grassland';
+    } else if (moisture > 0.8 && elevation < 0.45) {
+      return 'swamp';
+    } else if (moisture > 0.55) {
+      return 'forest';
+    } else {
+      return 'grassland';
+    }
+  }
+  
+  // Cool temperate areas
+  if (temperature > 0.4) {
+    if (moisture < 0.3) {
+      return 'grassland';
+    } else if (moisture > 0.7) {
+      return 'forest';
+    } else if (moisture > 0.5) {
+      return 'forest';
+    } else {
+      return 'grassland';
+    }
+  }
+  
+  // Cold temperate areas
   if (moisture > 0.6) {
     return 'forest';
+  } else if (moisture > 0.3) {
+    return 'grassland';
+  } else {
+    return 'tundra';
   }
-  
-  // Default to grassland
-  return 'grassland';
 }
 
 /**
@@ -226,16 +265,44 @@ function generateTileAt(x: number, y: number, width: number, height: number, see
     elevation = Math.min(elevation, 0.25); // Ensure ocean stays below land threshold
   }
   
-  // Generate temperature based on latitude (distance from center) and elevation
+  // Generate temperature based on latitude, elevation, and continental effects
   const latitudeFactor = Math.abs((y / height) - 0.5) * 2; // 0 at equator, 1 at poles
-  let temperature = 1 - latitudeFactor; // Hot at equator, cold at poles
-  temperature += temperatureNoise.octaveNoise(x * temperatureScale, y * temperatureScale, 2, 0.3) * 0.3;
-  temperature -= elevation * 0.4; // Higher elevation = colder
+  let temperature = 1 - (latitudeFactor * 0.8); // Hot at equator, cold at poles (less extreme)
+  
+  // Add continental climate effects - more variation
+  temperature += temperatureNoise.octaveNoise(x * temperatureScale, y * temperatureScale, 3, 0.4) * 0.4;
+  
+  // Elevation cooling effect - more gradual
+  temperature -= elevation * 0.3;
+  
+  // Ocean moderating effect - areas near water are more temperate
+  const distanceFromWater = Math.min(1, elevation / 0.4); // Proxy for distance from water
+  const oceanModerationEffect = (1 - distanceFromWater) * 0.15;
+  if (latitudeFactor > 0.3) { // More noticeable in higher latitudes
+    temperature += oceanModerationEffect;
+  }
+  
   temperature = Math.max(0, Math.min(1, temperature)); // Clamp to 0-1
   
-  // Generate moisture patterns
-  let moisture = moistureNoise.octaveNoise(x * moistureScale, y * moistureScale, 3, 0.4);
+  // Generate moisture patterns with more realistic distribution
+  let moisture = moistureNoise.octaveNoise(x * moistureScale, y * moistureScale, 4, 0.5);
   moisture = (moisture + 1) / 2; // Normalize to 0-1
+  
+  // Add rain shadow effects - areas behind mountains (relative to moisture flow) are drier
+  const moistureFlow = moistureNoise.octaveNoise(x * moistureScale * 0.5, y * moistureScale * 0.5, 2, 0.3);
+  
+  // Continental moisture effects - interior areas tend to be drier
+  const continentalDryness = Math.max(0, (elevation - 0.4) * 0.8); // Higher inland areas are drier
+  moisture -= continentalDryness * 0.3;
+  
+  // Temperature-dependent moisture capacity (warmer air holds more moisture)
+  moisture *= 0.6 + (temperature * 0.4);
+  
+  // Coastal moisture enhancement
+  if (elevation < 0.5) {
+    moisture += (1 - distanceFromWater) * 0.2;
+  }
+  
   moisture = Math.max(0, Math.min(1, moisture)); // Clamp to 0-1
   
   // Determine biome based on climate and elevation

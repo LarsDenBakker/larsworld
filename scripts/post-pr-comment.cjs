@@ -9,31 +9,25 @@
  * Usage: node scripts/post-pr-comment.js [test-results-dir]
  */
 
-import { promises as fs } from 'fs';
-import { join, relative } from 'path';
-
-interface ScreenshotInfo {
-  path: string;
-  relativePath: string;
-  testName: string;
-}
+const fs = require('fs').promises;
+const path = require('path');
 
 /**
  * Recursively find all PNG screenshot files in a directory
  */
-async function findScreenshots(dir: string): Promise<ScreenshotInfo[]> {
-  const screenshots: ScreenshotInfo[] = [];
+async function findScreenshots(dir) {
+  const screenshots = [];
   
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
     
     for (const entry of entries) {
-      const fullPath = join(dir, entry.name);
+      const fullPath = path.join(dir, entry.name);
       
       if (entry.isDirectory()) {
         screenshots.push(...await findScreenshots(fullPath));
       } else if (entry.name.endsWith('.png')) {
-        const relativePath = relative('test-results', fullPath);
+        const relativePath = path.relative('test-results', fullPath);
         const testName = extractTestName(relativePath);
         
         screenshots.push({
@@ -44,7 +38,7 @@ async function findScreenshots(dir: string): Promise<ScreenshotInfo[]> {
       }
     }
   } catch (error) {
-    console.log(`Could not read directory ${dir}: ${(error as Error).message}`);
+    console.log(`Could not read directory ${dir}: ${error.message}`);
   }
   
   return screenshots;
@@ -53,7 +47,7 @@ async function findScreenshots(dir: string): Promise<ScreenshotInfo[]> {
 /**
  * Extract test name from screenshot file path
  */
-function extractTestName(filePath: string): string {
+function extractTestName(filePath) {
   const parts = filePath.split('/');
   const fileName = parts[parts.length - 1];
   
@@ -68,7 +62,7 @@ function extractTestName(filePath: string): string {
 /**
  * Generate PR comment body with test results and screenshot information
  */
-function generateCommentBody(screenshots: ScreenshotInfo[], runId: string, repo: { owner: string; repo: string }): string {
+function generateCommentBody(screenshots, runId, repo) {
   let commentBody = '## 🔍 E2E Test Results\n\n';
   commentBody += '❌ **E2E tests failed.** Please review the test results and screenshots below.\n\n';
   
@@ -84,7 +78,7 @@ function generateCommentBody(screenshots: ScreenshotInfo[], runId: string, repo:
       }
       groups[testName].push(screenshot);
       return groups;
-    }, {} as Record<string, ScreenshotInfo[]>);
+    }, {});
     
     const testNames = Object.keys(groupedScreenshots).slice(0, 5); // Limit to 5 tests
     
@@ -109,7 +103,7 @@ function generateCommentBody(screenshots: ScreenshotInfo[], runId: string, repo:
     }
     
     commentBody += '📁 **All screenshots and test reports are available in the [workflow artifacts]';
-    commentBody += `(https://github.com/${repo.owner}/${repo.repo}/actions/runs/${runId}).**\n\n';
+    commentBody += `(https://github.com/${repo.owner}/${repo.repo}/actions/runs/${runId}).**\n\n`;
   } else {
     commentBody += '### 📸 Screenshots\n\nNo screenshots were captured.\n\n';
   }
@@ -125,7 +119,7 @@ function generateCommentBody(screenshots: ScreenshotInfo[], runId: string, repo:
 /**
  * Main function - for use in GitHub Actions or standalone
  */
-async function main(): Promise<void> {
+async function main() {
   try {
     const testResultsDir = process.argv[2] || 'test-results';
     const screenshots = await findScreenshots(testResultsDir);
@@ -143,19 +137,15 @@ async function main(): Promise<void> {
     console.log(commentBody);
     console.log('---');
     
-    // If we have GitHub context, we could post directly, but it's better
-    // to let GitHub Actions handle the actual posting for permissions
-    
   } catch (error) {
-    console.error('Error generating PR comment:', (error as Error).message);
+    console.error('Error generating PR comment:', error.message);
     process.exit(1);
   }
 }
 
-// Export functions for testing
-export { findScreenshots, generateCommentBody, extractTestName };
-
 // Run if called directly
-if (process.argv[1] && process.argv[1].endsWith('post-pr-comment.ts')) {
+if (require.main === module) {
   main().catch(console.error);
 }
+
+module.exports = { findScreenshots, generateCommentBody, extractTestName };

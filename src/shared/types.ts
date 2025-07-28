@@ -45,8 +45,6 @@ export interface Tile {
 export interface MapPageRequest {
   page: number;
   pageSize: number;
-  width: number;
-  height: number;
   seed: string;
 }
 
@@ -55,8 +53,6 @@ export interface MapPageResponse {
   page: number;
   pageSize: number;
   totalPages: number;
-  width: number;
-  height: number;
   seed: string;
   startY: number;
   endY: number;

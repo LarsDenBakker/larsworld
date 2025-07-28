@@ -20,11 +20,14 @@ test.describe('LarsWorld Main Page', () => {
     await expect(page.locator('#map-container')).toBeVisible();
     await expect(page.locator('#legend')).toBeVisible();
     
-    // Check for generate button
-    const generateButton = page.locator('#generate-map-btn');
+    // Check for generate button (now only paginated)
+    const generateButton = page.locator('#generate-paginated-btn');
     await expect(generateButton).toBeVisible();
     await expect(generateButton).toHaveText('Generate World');
     await expect(generateButton).toBeEnabled();
+    
+    // Check that old SSE button is no longer present
+    await expect(page.locator('#generate-map-btn')).not.toBeVisible();
   });
 
   test('should display legend with all biome types', async ({ page }) => {
@@ -66,5 +69,13 @@ test.describe('LarsWorld Main Page', () => {
     const legendColors = page.locator('.legend-color');
     const count = await legendColors.count();
     expect(count).toBeGreaterThan(0);
+    
+    // Verify that width/height inputs are no longer present (removed for fixed dimensions)
+    await expect(page.locator('#width-input')).not.toBeVisible();
+    await expect(page.locator('#height-input')).not.toBeVisible();
+    
+    // But seed and pagesize inputs should still be present
+    await expect(page.locator('#seed-input')).toBeVisible();
+    await expect(page.locator('#pagesize-input')).toBeVisible();
   });
 });

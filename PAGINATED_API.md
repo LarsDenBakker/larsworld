@@ -1,29 +1,29 @@
-# Paginated Map Generation API
+# Map Generation API
 
-This implementation provides a pagination-based map generation system that respects Netlify's 6MB response size limit while enabling the generation of large procedural worlds.
+This implementation provides a pagination-based map generation system that generates realistic 1000×1000 earthlike worlds with continental patterns.
 
 ## Features
 
-- ✅ **Paginated API**: GET endpoints with `page`, `pageSize`, `width`, `height`, and `seed` parameters
+- ✅ **Fixed 1000×1000 Maps**: All maps are generated at exactly 1000×1000 tiles
+- ✅ **Paginated API**: GET endpoints with `page`, `pageSize`, and `seed` parameters
 - ✅ **6MB Limit Protection**: Automatic payload size validation and optimal page sizing
 - ✅ **Stateless & Deterministic**: Same coordinates + seed = identical tiles every time
 - ✅ **Compact JSON**: Minimal tile data using numeric indices and scaled values
+- ✅ **Realistic Continents**: Usually 2 large continents, ~45% land coverage (1.5× Earth's ratio)
+- ✅ **Clear Ocean/Land Separation**: Distinct visual boundaries between continents and oceans
 - ✅ **Shared Types**: TypeScript interfaces used by both server and client
-- ✅ **Streaming-like Experience**: Sequential page requests with real-time rendering
 - ✅ **Dependency-light**: Simple implementation using standard web APIs
 
 ## API Endpoint
 
 ```
-GET /api/map?page=0&pageSize=64&width=256&height=256&seed=abc
+GET /api/map?page=0&pageSize=64&seed=abc
 ```
 
 ### Parameters
 
 - `page` (number): Zero-based page index
-- `pageSize` (number): Number of rows per page (1-256)
-- `width` (number): Map width in tiles (1-10000)
-- `height` (number): Map height in tiles (1-10000)  
+- `pageSize` (number): Number of rows per page (1-1000)
 - `seed` (string): Deterministic seed for world generation
 
 ### Response Format
@@ -33,8 +33,6 @@ GET /api/map?page=0&pageSize=64&width=256&height=256&seed=abc
   page: number;           // Current page index
   pageSize: number;       // Actual page size used
   totalPages: number;     // Total pages for complete map
-  width: number;          // Map width
-  height: number;         // Map height
   seed: string;           // Generation seed
   startY: number;         // Starting Y coordinate of this page
   endY: number;           // Ending Y coordinate of this page
@@ -74,10 +72,8 @@ Instead of verbose tile objects, we use a minimal format:
 ```typescript
 import { generatePaginatedMap } from './paginated-map';
 
-// Generate a 256x256 world in 4 pages
+// Generate a 1000x1000 world in 16 pages
 const mapData = await generatePaginatedMap({
-  width: 256,
-  height: 256,
   seed: 'my-world-123',
   pageSize: 64,
   onProgress: (page, total) => console.log(`${page}/${total}`),
@@ -90,8 +86,6 @@ const mapData = await generatePaginatedMap({
 ```typescript
 // Render each page as it arrives for streaming effect
 await generatePaginatedMap({
-  width: 512,
-  height: 512,
   seed: 'streaming-demo',
   pageSize: 32,
   onPageReceived: (response) => {
@@ -104,27 +98,27 @@ await generatePaginatedMap({
 
 ```typescript
 // Fetch individual pages
-const page0 = await fetch('/api/map?page=0&pageSize=64&width=256&height=256&seed=test');
-const page1 = await fetch('/api/map?page=1&pageSize=64&width=256&height=256&seed=test');
+const page0 = await fetch('/api/map?page=0&pageSize=64&seed=test');
+const page1 = await fetch('/api/map?page=1&pageSize=64&seed=test');
 
 // Same seed + coordinates = identical results
 const response = await page0.json();
-console.log(response.totalPages); // 4
-console.log(response.sizeBytes);  // ~487KB per page
+console.log(response.totalPages); // 16 for 1000x1000 with pageSize 64
+console.log(response.sizeBytes);  // ~1.6MB per page
 ```
 
 ## Payload Size Management
 
-The system automatically ensures payloads stay under 6MB:
+The system automatically ensures payloads stay under 6MB for 1000×1000 maps:
 
 ```typescript
-// Calculate optimal page size for any width
-const optimalPageSize = calculateOptimalPageSize(1024); // ~245 rows
-const estimate = estimateMapSize(1024, 1024, 32);
+// Calculate optimal page size for 1000x1000 maps
+const optimalPageSize = calculateOptimalPageSize(); // ~240 rows
+const estimate = estimateMapSize(64);
 
 console.log({
-  totalPages: estimate.totalPages,        // 32 pages
-  pageSize: estimate.estimatedPageSize,   // ~819KB per page
+  totalPages: estimate.totalPages,        // 16 pages
+  pageSize: estimate.estimatedPageSize,   // ~1.6MB per page
   isUnderLimit: estimate.isUnderLimit     // true
 });
 ```
@@ -141,17 +135,27 @@ console.log({
 // 400 response for invalid parameters
 {
   "error": "Map generation failed",
-  "details": "Width must be between 1 and 10000"
+  "details": "Page size must be between 1 and 1000"
 }
 ```
 
 ## Performance Characteristics
 
-| Map Size | Page Size | Total Pages | Page Size | Total Time |
-|----------|-----------|-------------|-----------|------------|
-| 256×256  | 64        | 4           | ~487KB    | ~2s        |
-| 512×512  | 32        | 16          | ~478KB    | ~8s        |
-| 1024×1024| 16        | 64          | ~470KB    | ~32s       |
+| Page Size | Total Pages | Page Size | Total Time |
+|-----------|-------------|-----------|------------|
+| 64        | 16          | ~1.6MB    | ~8s        |
+| 32        | 32          | ~800KB    | ~16s       |
+| 16        | 63          | ~400KB    | ~32s       |
+
+*All measurements for 1000×1000 maps*
+
+## Continental Generation Features
+
+- **Realistic Land Coverage**: ~45% land (1.5× Earth's ~30% ratio)
+- **Continental Patterns**: Usually 2 large continents, rarely 1 huge or 3+ smaller ones  
+- **Clear Boundaries**: Distinct visual separation between ocean and land
+- **Diverse Biomes**: Mountains, forests, deserts, grasslands naturally distributed
+- **Deterministic**: Same seed always produces identical continental patterns
 
 ## Implementation Files
 
@@ -163,9 +167,10 @@ console.log({
 
 ## Key Benefits
 
-1. **Netlify Compatible**: All responses < 6MB
-2. **Deterministic**: Same seed produces identical worlds
-3. **Scalable**: Generate maps of any size through pagination
-4. **Efficient**: 85% smaller payloads vs verbose format
-5. **Progressive**: Users see results as they're generated
-6. **Simple**: Standard HTTP GET requests, no WebSockets/SSE required
+1. **Fixed Size**: All maps are exactly 1000×1000 for consistency
+2. **Netlify Compatible**: All responses < 6MB
+3. **Deterministic**: Same seed produces identical worlds
+4. **Realistic Continents**: Enhanced algorithm for earthlike patterns  
+5. **Efficient**: 85% smaller payloads vs verbose format
+6. **Progressive**: Users see results as they're generated
+7. **Simple**: Standard HTTP GET requests, no WebSockets/SSE required

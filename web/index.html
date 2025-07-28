@@ -1,24 +1,44 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>LarsWorld</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LarsWorld - Procedural World Generator</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>LarsWorld</h1>
+    <header>
+        <h1>LarsWorld</h1>
+        <p class="subtitle">Procedural World Generator</p>
+    </header>
     
-    <div id="map-section">
+    <main id="map-section">
         <div id="map-controls">
-            <button id="generate-paginated-btn">Generate World</button>
-            <div class="control-group">
-                <label for="seed-input">Seed:</label>
-                <input type="text" id="seed-input" value="demo-seed-123" placeholder="Enter seed">
-                <label for="pagesize-input">Page Size:</label>
-                <input type="number" id="pagesize-input" value="64" min="1" max="256">
+            <button id="generate-paginated-btn" class="generate-btn">
+                <span class="btn-icon">🌍</span>
+                Generate World
+            </button>
+            
+            <div class="controls-grid">
+                <div class="control-group">
+                    <label for="seed-input">Seed (optional):</label>
+                    <input type="text" id="seed-input" value="" placeholder="Leave empty for random">
+                </div>
+                <div class="control-group">
+                    <label for="pagesize-input">Page Size:</label>
+                    <input type="number" id="pagesize-input" value="64" min="1" max="256">
+                </div>
+            </div>
+            
+            <div id="seed-display" class="seed-display" style="display: none;">
+                <strong>Generated with seed:</strong> <span id="current-seed"></span>
+                <button id="copy-seed" class="copy-btn" title="Copy seed">📋</button>
             </div>
         </div>
+        
         <div id="map-container"></div>
-        <div id="legend">
+        
+        <aside id="legend">
             <h3>Legend</h3>
             <div class="legend-item">
                 <div class="legend-color ocean"></div>
@@ -60,8 +80,8 @@
                 <div class="legend-color swamp"></div>
                 <span>Swamp</span>
             </div>
-        </div>
-    </div>
+        </aside>
+    </main>
     
     <script src="main.js"></script>
 </body>

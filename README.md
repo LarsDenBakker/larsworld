@@ -41,7 +41,7 @@ See [E2E_TESTING.md](E2E_TESTING.md) for detailed testing documentation, includi
 
 ## Features
 
-- **World Generation**: Generate procedural earth-like worlds with various biomes
+- **World Generation**: Generate procedural 1000×1000 earthlike worlds with realistic continental patterns
 - **Interactive Map**: Canvas-based rendering with real-time generation progress
-- **Server-Sent Events**: Streaming world generation for better user experience
+- **Paginated API**: Efficient map loading through pagination system respecting 6MB limits
 - **Netlify Deployment**: Serverless functions for scalable API hosting

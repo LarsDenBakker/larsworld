@@ -7,8 +7,6 @@
 import { MapPageResponse, CompactTile, BIOME_TYPES, compactToTile } from '../shared/types.js';
 
 interface MapGenerationConfig {
-  width: number;
-  height: number;
   seed: string;
   pageSize: number;
   onProgress?: (page: number, totalPages: number) => void;
@@ -43,12 +41,10 @@ const BIOME_COLORS: Record<string, string> = {
 /**
  * Fetch a single page of map data from the API
  */
-async function fetchMapPage(page: number, pageSize: number, width: number, height: number, seed: string): Promise<MapPageResponse> {
+async function fetchMapPage(page: number, pageSize: number, seed: string): Promise<MapPageResponse> {
   const params = new URLSearchParams({
     page: page.toString(),
     pageSize: pageSize.toString(),
-    width: width.toString(),
-    height: height.toString(),
     seed: seed
   });
 
@@ -93,7 +89,8 @@ function createMapRenderer(width: number, height: number, container: HTMLElement
  */
 function renderMapPage(renderer: MapRenderer, response: MapPageResponse): void {
   const { ctx, tileSize } = renderer;
-  const { tiles, startY, width } = response;
+  const { tiles, startY } = response;
+  const width = 1000; // Fixed width for all maps
 
   tiles.forEach((row, rowIndex) => {
     const y = startY + rowIndex;
@@ -111,7 +108,11 @@ function renderMapPage(renderer: MapRenderer, response: MapPageResponse): void {
  * Generate and render a complete map using pagination
  */
 export async function generatePaginatedMap(config: MapGenerationConfig, container: HTMLElement): Promise<void> {
-  const { width, height, seed, pageSize, onProgress, onPageReceived, onComplete, onError } = config;
+  const { seed, pageSize, onProgress, onPageReceived, onComplete, onError } = config;
+  
+  // Fixed dimensions for all maps
+  const width = 1000;
+  const height = 1000;
 
   try {
     // Clear container
@@ -136,7 +137,7 @@ export async function generatePaginatedMap(config: MapGenerationConfig, containe
 
     // Get first page to determine total pages
     progressText.textContent = 'Fetching first page...';
-    const firstPage = await fetchMapPage(0, pageSize, width, height, seed);
+    const firstPage = await fetchMapPage(0, pageSize, seed);
     const totalPages = firstPage.totalPages;
 
     console.log(`Map will be generated in ${totalPages} pages`);
@@ -162,7 +163,7 @@ export async function generatePaginatedMap(config: MapGenerationConfig, containe
     for (let page = 1; page < totalPages; page++) {
       try {
         progressText.textContent = `Fetching page ${page + 1}...`;
-        const pageResponse = await fetchMapPage(page, pageSize, width, height, seed);
+        const pageResponse = await fetchMapPage(page, pageSize, seed);
         
         // Render page
         renderMapPage(renderer, pageResponse);
@@ -188,7 +189,7 @@ export async function generatePaginatedMap(config: MapGenerationConfig, containe
     infoContainer.style.marginBottom = '10px';
     infoContainer.innerHTML = `
       <div style="font-size: 14px; color: #6b7280;">
-        Map generated: ${width}×${height} tiles, seed: "${seed}", ${totalPages} pages
+        Map generated: 1000×1000 tiles, seed: "${seed}", ${totalPages} pages
       </div>
     `;
     container.insertBefore(infoContainer, renderer.canvas);
@@ -204,13 +205,15 @@ export async function generatePaginatedMap(config: MapGenerationConfig, containe
 }
 
 /**
- * Calculate estimated payload sizes for different configurations
+ * Calculate estimated payload sizes for different configurations for 1000x1000 maps
  */
-export function calculatePayloadEstimate(width: number, height: number, pageSize: number): {
+export function calculatePayloadEstimate(pageSize: number): {
   totalPages: number;
   estimatedPageSize: number;
   totalSize: number;
 } {
+  const width = 1000; // Fixed width
+  const height = 1000; // Fixed height
   const totalPages = Math.ceil(height / pageSize);
   const tilesPerPage = width * pageSize;
   const estimatedPageSize = tilesPerPage * 25; // ~25 bytes per compact tile
@@ -229,37 +232,33 @@ export function calculatePayloadEstimate(width: number, height: number, pageSize
 export function demonstratePaginatedMapAPI() {
   console.log('=== Paginated Map API Examples ===');
   
-  // Example 1: Small map
-  const smallMapConfig = {
-    width: 256,
-    height: 256,
+  // Example 1: Standard configuration
+  const standardConfig = {
     seed: 'example-seed-123',
     pageSize: 64
   };
   
-  const smallMapEstimate = calculatePayloadEstimate(smallMapConfig.width, smallMapConfig.height, smallMapConfig.pageSize);
-  console.log('Small Map (256×256):', {
-    config: smallMapConfig,
-    estimate: smallMapEstimate,
-    url: `/api/map?page=0&pageSize=${smallMapConfig.pageSize}&width=${smallMapConfig.width}&height=${smallMapConfig.height}&seed=${smallMapConfig.seed}`
+  const standardEstimate = calculatePayloadEstimate(standardConfig.pageSize);
+  console.log('Standard Map (1000×1000):', {
+    config: standardConfig,
+    estimate: standardEstimate,
+    url: `/api/map?page=0&pageSize=${standardConfig.pageSize}&seed=${standardConfig.seed}`
   });
 
-  // Example 2: Large map
-  const largeMapConfig = {
-    width: 1024,
-    height: 1024,
-    seed: 'large-world-456',
+  // Example 2: Large page size
+  const largePageConfig = {
+    seed: 'large-page-456',
     pageSize: 32
   };
   
-  const largeMapEstimate = calculatePayloadEstimate(largeMapConfig.width, largeMapConfig.height, largeMapConfig.pageSize);
-  console.log('Large Map (1024×1024):', {
-    config: largeMapConfig,
-    estimate: largeMapEstimate,
-    url: `/api/map?page=0&pageSize=${largeMapConfig.pageSize}&width=${largeMapConfig.width}&height=${largeMapConfig.height}&seed=${largeMapConfig.seed}`
+  const largePageEstimate = calculatePayloadEstimate(largePageConfig.pageSize);
+  console.log('Large Page Map (1000×1000):', {
+    config: largePageConfig,
+    estimate: largePageEstimate,
+    url: `/api/map?page=0&pageSize=${largePageConfig.pageSize}&seed=${largePageConfig.seed}`
   });
 
   // Example 3: Maximum safe page size for 6MB limit
-  const maxSafePageSize = Math.floor((6 * 1024 * 1024 - 1000) / (1024 * 25)); // Conservative estimate
-  console.log('Maximum safe page size for 1024-width map:', maxSafePageSize);
+  const maxSafePageSize = Math.floor((6 * 1024 * 1024 - 1000) / (1000 * 25)); // Conservative estimate
+  console.log('Maximum safe page size for 1000x1000 map:', maxSafePageSize);
 }

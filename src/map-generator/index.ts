@@ -159,7 +159,7 @@ function getBiome(temperature: number, moisture: number, elevation: number): Til
 
 /**
  * Generates a realistic 2D map using noise-based elevation and climate simulation
- * For 500x500+ maps, creates earthlike planet with realistic continental shapes
+ * All maps are guaranteed to have ocean boundaries on all edges
  */
 export function generateMap(width: number, height: number): Tile[][] {
   const map: Tile[][] = [];
@@ -181,9 +181,18 @@ export function generateMap(width: number, height: number): Tile[][] {
   const temperatureScale = isLargeMap ? 0.004 : 0.02; // Large climate zones
   const moistureScale = isLargeMap ? 0.015 : 0.08; // Medium-sized moisture patterns
   
+  // Calculate edge distances for ocean forcing
+  const oceanBorderWidth = Math.min(Math.max(3, Math.min(width, height) * 0.1), 10);
+  
   for (let y = 0; y < height; y++) {
     const row: Tile[] = [];
     for (let x = 0; x < width; x++) {
+      // Calculate distance from nearest edge (0 = at edge, higher = toward center)
+      const distanceFromEdge = Math.min(x, y, width - 1 - x, height - 1 - y);
+      
+      // Force ocean at boundaries by modifying elevation based on distance from edge
+      const edgeFactor = Math.min(1, distanceFromEdge / oceanBorderWidth);
+      
       let elevation = 0;
       
       if (isLargeMap) {
@@ -234,6 +243,14 @@ export function generateMap(width: number, height: number): Tile[][] {
         if (elevation < 0.4) {
           elevation = elevation * 0.7;
         }
+      }
+      
+      // Apply ocean boundary forcing - ensure all edges are ocean
+      if (distanceFromEdge < oceanBorderWidth) {
+        // Force very low elevation near edges to guarantee ocean
+        const forcedOceanElevation = 0.05; // Well below ocean threshold of 0.25
+        elevation = forcedOceanElevation + (elevation * edgeFactor * 0.2); // Smooth transition
+        elevation = Math.min(elevation, 0.2); // Cap to ensure ocean biome
       }
       
       // Generate temperature based on latitude (distance from center) and elevation

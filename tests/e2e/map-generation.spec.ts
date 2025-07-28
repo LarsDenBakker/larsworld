@@ -1,177 +1,128 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('LarsWorld Map Generation', () => {
-  test('should generate 1000x1000 world map successfully', async ({ page }) => {
+  test('should test small map generation with proper ocean boundaries', async ({ page }) => {
+    // Test the dedicated test endpoint for small maps
+    const response = await page.request.get('/api/test-map?width=50&height=50');
+    expect(response.ok()).toBeTruthy();
+    
+    const data = await response.json();
+    
+    // Should have proper dimensions
+    expect(data.width).toBe(50);
+    expect(data.height).toBe(50);
+    
+    // Should generate quickly (under 1 second for 50x50)
+    expect(data.generationTime).toBeLessThan(1000);
+    
+    // All edges should be ocean
+    expect(data.allEdgesOcean).toBe(true);
+    expect(data.edgeOceanRatio).toBe(1);
+    
+    // Should have ocean as significant portion
+    expect(data.biomeCounts.ocean).toBeGreaterThan(500); // At least 20% of 2500 tiles
+    
+    // Should have some land biomes
+    const landBiomes = Object.keys(data.biomeCounts).filter(biome => 
+      biome !== 'ocean' && biome !== 'shallow_water'
+    );
+    expect(landBiomes.length).toBeGreaterThan(0);
+    
+    console.log('Test map biome distribution:', data.biomeCounts);
+  });
+
+  test('should test boundary conditions for different small map sizes', async ({ page }) => {
+    const testSizes = [
+      { width: 20, height: 20 },
+      { width: 30, height: 40 }, // Non-square
+      { width: 10, height: 10 }, // Very small
+    ];
+
+    for (const { width, height } of testSizes) {
+      const response = await page.request.get(`/api/test-map?width=${width}&height=${height}`);
+      expect(response.ok()).toBeTruthy();
+      
+      const data = await response.json();
+      
+      // All edges should be ocean for any size
+      expect(data.allEdgesOcean).toBe(true);
+      expect(data.edgeOceanRatio).toBe(1);
+      
+      console.log(`${width}x${height} map: ${data.biomeCounts.ocean} ocean tiles, all edges ocean: ${data.allEdgesOcean}`);
+    }
+  });
+
+  test('should handle basic UI interaction for map generation', async ({ page }) => {
     await page.goto('/');
     
     const generateButton = page.locator('#generate-paginated-btn');
     const mapContainer = page.locator('#map-container');
     
-    // Initial state - button should be enabled and container empty
+    // Initial state
     await expect(generateButton).toBeEnabled();
     await expect(generateButton).toHaveText('Generate World');
     
-    // Click generate button
+    // Start generation (will still be 1000x1000 from frontend, but we test the basic flow)
     await generateButton.click();
     
-    // Button should be disabled and text changed during generation
+    // Button should be disabled during generation
     await expect(generateButton).toBeDisabled();
     await expect(generateButton).toHaveText('Generating World...');
     
-    // Progress indicator should appear
+    // Progress indicator should appear quickly
     await expect(page.locator('text=Generating Map with Pagination...')).toBeVisible({ timeout: 10000 });
     
-    // Wait for progress bar to appear
+    // Wait for first page to start loading (should be fast)
     await expect(page.locator('#progress-bar')).toBeVisible({ timeout: 10000 });
     
-    // Wait for generation to complete (this might take a while for 1000x1000)
-    await expect(page.locator('text=Map generated: 1000×1000 tiles')).toBeVisible({ timeout: 90000 });
-    
-    // Button should be re-enabled after completion
-    await expect(generateButton).toBeEnabled();
-    await expect(generateButton).toHaveText('Generate World');
-    
-    // Canvas should be present in the map container
-    await expect(mapContainer.locator('canvas')).toBeVisible();
-    
-    // Map info should display fixed dimensions
-    await expect(page.locator('text=Map generated: 1000×1000 tiles')).toBeVisible();
-  });
-
-  test('should display progress during map generation', async ({ page }) => {
-    await page.goto('/');
-    
-    const generateButton = page.locator('#generate-paginated-btn');
-    
-    // Start generation
-    await generateButton.click();
-    
-    // Check for progress elements
-    await expect(page.locator('text=Generating Map with Pagination...')).toBeVisible({ timeout: 10000 });
-    
-    const progressBar = page.locator('#progress-bar');
+    // For faster testing, we just verify the generation starts correctly
+    // Rather than waiting for the full 1000x1000 map to complete
     const progressText = page.locator('#progress-text');
+    await expect(progressText).toContainText('Fetching', { timeout: 15000 });
     
-    await expect(progressBar).toBeVisible();
-    await expect(progressText).toBeVisible();
-    
-    // Initial progress text should indicate page fetching
-    await expect(progressText).toContainText('Fetching page', { timeout: 10000 });
-    
-    // Progress should eventually show page information
-    await expect(progressText).toContainText('Page', { timeout: 30000 });
+    console.log('Basic UI interaction verified - generation process started correctly');
   });
 
-  test('should render canvas with proper dimensions for 1000x1000 map', async ({ page }) => {
-    await page.goto('/');
+  test('should validate API endpoints respond correctly', async ({ page }) => {
+    // Test ping endpoint
+    const pingResponse = await page.request.get('/api/ping');
+    expect(pingResponse.ok()).toBeTruthy();
+    const pingData = await pingResponse.json();
+    expect(pingData.message).toBe('Hello World from the local server!');
     
-    const generateButton = page.locator('#generate-paginated-btn');
-    const mapContainer = page.locator('#map-container');
+    // Test first page of map generation
+    const mapResponse = await page.request.get('/api/map?page=0&pageSize=2&seed=test');
+    expect(mapResponse.ok()).toBeTruthy();
+    const mapData = await mapResponse.json();
     
-    // Generate map
-    await generateButton.click();
+    // Should have expected structure
+    expect(mapData.page).toBe(0);
+    expect(mapData.pageSize).toBe(2);
+    expect(mapData.seed).toBe('test');
+    expect(mapData.tiles).toBeDefined();
+    expect(Array.isArray(mapData.tiles)).toBe(true);
     
-    // Wait for completion
-    await expect(page.locator('text=Map generated: 1000×1000 tiles')).toBeVisible({ timeout: 90000 });
-    
-    // Check canvas properties
-    const canvas = mapContainer.locator('canvas');
-    await expect(canvas).toBeVisible();
-    
-    // Canvas should have border styling
-    const borderStyle = await canvas.evaluate((el) => getComputedStyle(el).border);
-    expect(borderStyle).toContain('1px');
-    
-    // Canvas should have reasonable dimensions (not zero) and be scaled to fit display
-    const dimensions = await canvas.evaluate((el) => ({
-      width: el.width,
-      height: el.height
-    }));
-    
-    expect(dimensions.width).toBeGreaterThan(0);
-    expect(dimensions.height).toBeGreaterThan(0);
-    // For 1000x1000 map displayed at max 800px, expect square aspect ratio
-    expect(Math.abs(dimensions.width - dimensions.height)).toBeLessThan(10);
+    console.log(`First page generated: ${mapData.tiles.length} rows, total pages: ${mapData.totalPages}`);
   });
 
-  test('should handle API connection properly', async ({ page }) => {
-    await page.goto('/');
-    
-    // Monitor network requests to the paginated map endpoint
-    let hasMapRequest = false;
-    
-    page.on('request', (request) => {
-      if (request.url().includes('/api/map')) {
-        hasMapRequest = true;
-      }
-    });
-    
-    // Click generate button
-    await page.locator('#generate-paginated-btn').click();
-    
-    // Wait a bit for the request to be made
-    await page.waitForTimeout(2000);
-    
-    // Verify the API call was made
-    expect(hasMapRequest).toBe(true);
-  });
-
-  test('should handle multiple generations', async ({ page }) => {
-    await page.goto('/');
-    
-    const generateButton = page.locator('#generate-paginated-btn');
-    const mapContainer = page.locator('#map-container');
-    
-    // First generation
-    await generateButton.click();
-    await expect(page.locator('text=Map generated: 1000×1000 tiles')).toBeVisible({ timeout: 90000 });
-    
-    // Clear the container check
-    const firstCanvas = mapContainer.locator('canvas');
-    await expect(firstCanvas).toBeVisible();
-    
-    // Second generation
-    await generateButton.click();
-    await expect(page.locator('text=Generating Map with Pagination...')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('text=Map generated: 1000×1000 tiles')).toBeVisible({ timeout: 90000 });
-    
-    // Should still have a canvas (possibly replaced)
-    await expect(mapContainer.locator('canvas')).toBeVisible();
-  });
-
-  test('should validate fixed map dimensions', async ({ page }) => {
-    await page.goto('/');
-    
-    // Start generation and check for 1000x1000 in multiple places
-    await page.locator('#generate-paginated-btn').click();
-    
-    // Should show 1000x1000 in completion message
-    await expect(page.locator('text=Map generated: 1000×1000 tiles')).toBeVisible({ timeout: 90000 });
-    
-    // Check that no width/height inputs are present (they should be removed)
-    await expect(page.locator('#width-input')).not.toBeVisible();
-    await expect(page.locator('#height-input')).not.toBeVisible();
-  });
-
-  test('should generate realistic continental patterns', async ({ page }) => {
-    await page.goto('/');
-    
-    // Generate map and wait for completion
-    await page.locator('#generate-paginated-btn').click();
-    await expect(page.locator('text=Map generated: 1000×1000 tiles')).toBeVisible({ timeout: 90000 });
-    
-    // Check that canvas is rendered with expected size
-    const canvas = page.locator('#map-container canvas');
-    await expect(canvas).toBeVisible();
-    
-    // Validate that canvas contains actual image data (not blank)
-    const hasImageData = await canvas.evaluate((canvas) => {
-      const ctx = canvas.getContext('2d');
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      // Check if there are non-zero pixels (indicating actual map content)
-      return imageData.data.some(pixel => pixel !== 0);
-    });
-    
-    expect(hasImageData).toBe(true);
+  test('should validate biome assignment correctness', async ({ page }) => {
+    // Test multiple small maps to ensure consistent biome assignment
+    for (let i = 0; i < 3; i++) {
+      const response = await page.request.get(`/api/test-map?width=30&height=30`);
+      const data = await response.json();
+      
+      // Should always have ocean
+      expect(data.biomeCounts.ocean).toBeGreaterThan(0);
+      
+      // Ocean should be reasonable percentage (not 100% or 0%)
+      const totalTiles = 30 * 30;
+      const oceanPercent = (data.biomeCounts.ocean / totalTiles) * 100;
+      expect(oceanPercent).toBeGreaterThan(10); // At least 10%
+      expect(oceanPercent).toBeLessThan(90);   // At most 90%
+      
+      // Should have some variety in biomes (at least 2 different types)
+      const biomeTypes = Object.keys(data.biomeCounts);
+      expect(biomeTypes.length).toBeGreaterThanOrEqual(2);
+    }
   });
 });

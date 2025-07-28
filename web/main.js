@@ -5,26 +5,73 @@ document.addEventListener('DOMContentLoaded', () => {
   // Get input elements
   const seedInput = document.getElementById('seed-input');
   const pagesizeInput = document.getElementById('pagesize-input');
+  const seedDisplay = document.getElementById('seed-display');
+  const currentSeedSpan = document.getElementById('current-seed');
+  const copySeedBtn = document.getElementById('copy-seed');
+
+  // Generate random seed function
+  function generateRandomSeed() {
+    const adjectives = ['brave', 'mystic', 'ancient', 'golden', 'silver', 'crystal', 'shadow', 'blazing', 'frozen', 'emerald'];
+    const nouns = ['world', 'realm', 'land', 'empire', 'kingdom', 'continent', 'island', 'planet', 'domain', 'sanctuary'];
+    const numbers = Math.floor(Math.random() * 9999) + 1;
+    
+    const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+    const noun = nouns[Math.floor(Math.random() * nouns.length)];
+    
+    return `${adjective}-${noun}-${numbers}`;
+  }
+
+  // Copy seed to clipboard
+  copySeedBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(currentSeedSpan.textContent);
+      copySeedBtn.textContent = '✓';
+      setTimeout(() => {
+        copySeedBtn.textContent = '📋';
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy seed:', err);
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = currentSeedSpan.textContent;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      copySeedBtn.textContent = '✓';
+      setTimeout(() => {
+        copySeedBtn.textContent = '📋';
+      }, 2000);
+    }
+  });
 
   // Add paginated map generation functionality
   generatePaginatedBtn.addEventListener('click', async () => {
     try {
       generatePaginatedBtn.disabled = true;
-      generatePaginatedBtn.textContent = 'Generating World...';
+      generatePaginatedBtn.innerHTML = '<span class="btn-icon">⏳</span> Generating World...';
       
-      // Get configuration from inputs
-      const seed = seedInput.value || 'demo-seed-123';
+      // Get configuration from inputs - use random seed if empty
+      let seed = seedInput.value.trim();
+      if (!seed) {
+        seed = generateRandomSeed();
+      }
+      
       const pageSize = parseInt(pagesizeInput.value) || 64;
+      
+      // Display the seed being used
+      currentSeedSpan.textContent = seed;
+      seedDisplay.style.display = 'flex';
       
       // Start paginated map generation
       await generatePaginatedMap({ seed, pageSize });
       
     } catch (error) {
       console.error('Error generating paginated map:', error);
-      mapContainer.innerHTML = '<p style="color: red;">Failed to generate map. Please try again.</p>';
+      mapContainer.innerHTML = '<p style="color: #ef4444; text-align: center; padding: 2rem;">Failed to generate map. Please try again.</p>';
     } finally {
       generatePaginatedBtn.disabled = false;
-      generatePaginatedBtn.textContent = 'Generate World';
+      generatePaginatedBtn.innerHTML = '<span class="btn-icon">🌍</span> Generate World';
     }
   });
 
@@ -59,17 +106,15 @@ document.addEventListener('DOMContentLoaded', () => {
           swamp: '#059669'
         };
 
-        // Create progress indicator
+        // Create progress indicator with modern styling
         const progressContainer = document.createElement('div');
-        progressContainer.style.marginBottom = '20px';
+        progressContainer.className = 'progress-container';
         progressContainer.innerHTML = `
-          <div style="background: #f3f4f6; border-radius: 4px; padding: 15px;">
-            <div style="margin-bottom: 10px; font-weight: bold;">Generating Map with Pagination...</div>
-            <div style="background: #e5e7eb; border-radius: 4px; height: 20px; overflow: hidden;">
-              <div id="progress-bar" style="background: #3b82f6; height: 100%; width: 0%; transition: width 0.3s ease;"></div>
-            </div>
-            <div id="progress-text" style="margin-top: 10px; font-size: 14px; color: #6b7280;">Initializing...</div>
+          <div class="progress-title">Generating World...</div>
+          <div class="progress-bar-container">
+            <div id="progress-bar"></div>
           </div>
+          <div id="progress-text">Initializing...</div>
         `;
         mapContainer.appendChild(progressContainer);
 
@@ -77,7 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const progressText = document.getElementById('progress-text');
 
         // Calculate display scale
-        const maxDisplaySize = 800;
+        const maxDisplaySize = Math.min(window.innerWidth - 64, window.innerHeight - 200, 800);
         const scale = Math.min(maxDisplaySize / width, maxDisplaySize / height, 1);
         const tileSize = Math.max(1, Math.floor(scale));
 
@@ -85,7 +130,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const canvas = document.createElement('canvas');
         canvas.width = width * tileSize;
         canvas.height = height * tileSize;
-        canvas.style.border = '1px solid #ccc';
         canvas.style.imageRendering = 'pixelated';
         canvas.style.display = 'block';
         canvas.style.margin = '0 auto';
@@ -181,15 +225,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Remove progress indicator
         progressContainer.remove();
 
-        // Add completion info
+        // Add completion info with modern styling
         const infoContainer = document.createElement('div');
-        infoContainer.style.marginTop = '10px';
-        infoContainer.style.fontSize = '14px';
-        infoContainer.style.color = '#6b7280';
-        infoContainer.style.textAlign = 'center';
+        infoContainer.className = 'info-container';
         infoContainer.innerHTML = `
-          Map generated: ${width}×${height} tiles, seed: "${seed}", ${totalPages} pages<br>
-          Using paginated API (${tileSize}px per tile)
+          <strong>World Generated Successfully!</strong><br>
+          ${width}×${height} tiles • ${totalPages} pages<br>
+          Seed: <strong>"${seed}"</strong><br>
+          <small>Using paginated API (${tileSize}px per tile)</small>
         `;
         mapContainer.appendChild(infoContainer);
 
@@ -197,7 +240,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       } catch (error) {
         console.error('Paginated map generation failed:', error);
-        mapContainer.innerHTML = `<p style="color: red;">Failed to generate map: ${error.message}</p>`;
+        mapContainer.innerHTML = `<div class="info-container" style="color: #ef4444; border-color: #fecaca;">
+          <strong>Failed to generate map</strong><br>
+          ${error.message}
+        </div>`;
         reject(error);
       }
     });

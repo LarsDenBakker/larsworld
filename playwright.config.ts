@@ -23,6 +23,9 @@ export default defineConfig({
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
 
+    /* Take screenshot on failure for CI/GitHub Actions */
+    screenshot: process.env.CI ? 'only-on-failure' : 'off',
+
     /* Wait for network to be idle before proceeding */
     actionTimeout: 30000,
     navigationTimeout: 30000,

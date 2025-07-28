@@ -161,59 +161,96 @@ npm run test:e2e:preview
 
 ## CI/CD Integration
 
+## CI/CD Integration
+
+### GitHub Actions Workflow
+
+The repository includes an automated E2E testing workflow (`.github/workflows/e2e-playwright.yml`) that:
+
+1. **Runs automatically** on every pull request and push to main branch
+2. **Blocks PR merges** if E2E tests fail (required status check)
+3. **Captures screenshots** on test failures for debugging
+4. **Uploads artifacts** including test reports and screenshots
+5. **Posts PR comments** with test results and links to screenshots
+
+**Workflow Features:**
+- Uses Ubuntu latest with Node.js 18
+- Installs Playwright browsers (Chromium) with system dependencies
+- Builds the project and runs E2E tests in CI mode
+- Uploads both HTML reports and failure screenshots as artifacts
+- Automatically comments on PRs when tests fail with helpful links
+
+**Artifacts Available:**
+- `playwright-report`: HTML test report and traces
+- `playwright-screenshots`: All failure screenshots (PNG format)
+
+**Required Setup:**
+No additional secrets or configuration required - the workflow uses GitHub's built-in `GITHUB_TOKEN` for PR comments and artifact uploads.
+
 ### GitHub Actions Example
 
-Add this to `.github/workflows/e2e-tests.yml`:
+The included workflow (`.github/workflows/e2e-playwright.yml`) provides:
 
 ```yaml
-name: E2E Tests
+name: E2E Tests (Playwright)
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
+    branches: [ main ]
+  push:
     branches: [ main ]
 
 jobs:
   e2e-tests:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 60
+
     steps:
     - uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
+    - uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
-    
-    - name: Install dependencies
-      run: npm ci
-    
-    - name: Install Playwright browsers
-      run: npm run test:install
-    
-    - name: Run E2E tests (local)
-      run: npm run test:e2e
-    
-    - name: Run E2E tests (preview)
+    - run: npm ci
+    - run: npx playwright install --with-deps chromium
+    - run: npm run build
+    - run: npm run test:e2e
       env:
-        NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-        NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-      run: npm run test:e2e:preview
-    
-    - name: Upload test results
-      uses: actions/upload-artifact@v4
+        CI: true
+    - uses: actions/upload-artifact@v4
       if: always()
       with:
         name: playwright-report
-        path: playwright-report/
-        retention-days: 30
+        path: |
+          playwright-report/
+          test-results/
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: playwright-screenshots
+        path: test-results/**/*.png
+    # Automatic PR commenting on failure
 ```
 
-**Required Secrets:**
-- `NETLIFY_AUTH_TOKEN`: Your Netlify personal access token
-- `NETLIFY_SITE_ID`: Your Netlify site ID
+**Key Features:**
+- **Required status check**: Workflow must pass for PR merges
+- **Screenshot capture**: Automatic on test failures in CI
+- **Artifact upload**: Test reports and screenshots preserved for 30 days
+- **PR comments**: Automatic posting of test results with screenshot links
+
+### Making the Workflow a Required Check
+
+To make E2E tests block PR merges:
+
+1. Go to your repository's **Settings > Branches**
+2. Edit the branch protection rule for `main`
+3. Enable "Require status checks to pass before merging"
+4. Add `e2e-tests` to the required status checks
+5. Save the branch protection rule
+
+### Manual GitHub Actions Example
+
+For reference, here's a basic manual workflow structure:
 
 ## Troubleshooting
 

@@ -87,9 +87,13 @@ class DeterministicPerlinNoise {
 
 /**
  * Determines biome based on temperature, moisture, and elevation
- * Updated for clearer ocean/land separation
+ * Updated for clearer ocean/land separation and new water types
  */
-function getBiome(temperature: number, moisture: number, elevation: number): BiomeType {
+function getBiome(temperature: number, moisture: number, elevation: number, isRiver: boolean = false, isLake: boolean = false): BiomeType {
+  // Rivers and lakes override other biomes (except ocean)
+  if (isRiver && elevation >= 0.2) return 'river';
+  if (isLake && elevation >= 0.25) return 'lake';
+  
   // Ocean and shallow water based on elevation - adjusted for clearer separation
   if (elevation < 0.3) {
     return elevation < 0.2 ? 'ocean' : 'shallow_water';
@@ -136,12 +140,12 @@ function getBiome(temperature: number, moisture: number, elevation: number): Bio
 
 /**
  * Generate a single tile at specific coordinates using deterministic noise
- * Enhanced for realistic continental patterns
+ * Enhanced for realistic continental patterns and configurable map size
  */
-function generateTileAt(x: number, y: number, seed: string): Tile {
-  // Fixed dimensions for all maps
-  const width = 1000;
-  const height = 1000;
+function generateTileAt(x: number, y: number, width: number, height: number, seed: string, rivers: Set<string>, lakes: Set<string>): Tile {
+  const coordKey = `${x},${y}`;
+  const isRiver = rivers.has(coordKey);
+  const isLake = lakes.has(coordKey);
   
   // Create noise generators with seed-based deterministic values
   const elevationNoise = new DeterministicPerlinNoise(seed + '_elevation');
@@ -150,28 +154,36 @@ function generateTileAt(x: number, y: number, seed: string): Tile {
   const temperatureNoise = new DeterministicPerlinNoise(seed + '_temperature');
   const moistureNoise = new DeterministicPerlinNoise(seed + '_moisture');
   
-  // Enhanced continental generation - create 2 main continents usually
+  // Enhanced continental generation for different map sizes
   const continentalNoise2 = new DeterministicPerlinNoise(seed + '_continental2');
   
-  // Scale factors optimized for 1000x1000 maps with realistic continents
-  const continentalScale = 0.0015; // Larger continental patterns for fewer, bigger continents
-  const continentalScale2 = 0.0018; // Slightly different scale for variation
-  const elevationScale = 0.008;
-  const coastalScale = 0.025; // More coastal complexity
-  const temperatureScale = 0.004;
-  const moistureScale = 0.015;
+  // Scale factors adjusted based on map size for consistent continental patterns
+  const baseScale = Math.max(width, height);
+  const continentalScale = 1.5 / baseScale; // Larger continental patterns for fewer, bigger continents
+  const continentalScale2 = 1.8 / baseScale; // Slightly different scale for variation
+  const elevationScale = 8 / baseScale;
+  const coastalScale = 25 / baseScale; // More coastal complexity
+  const temperatureScale = 4 / baseScale;
+  const moistureScale = 15 / baseScale;
 
   let elevation = 0;
   
-  // Create realistic continental patterns - aim for ~45% land coverage (1.5x Earth's ratio)
+  // Enhanced island/planet falloff - ensure ocean boundaries
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const maxDistance = Math.sqrt(centerX * centerX + centerY * centerY);
+  const distanceFromCenter = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+  const falloffFactor = Math.max(0, 1 - (distanceFromCenter / maxDistance) ** 1.5);
+  
+  // Create realistic continental patterns - aim for ~40% land coverage
   
   // Primary continental structure - creates main landmass distribution
   const continentalPattern1 = continentalNoise.octaveNoise(x * continentalScale, y * continentalScale, 3, 0.6);
   
   // Secondary continental structure - creates additional continents
   const continentalPattern2 = continentalNoise2.octaveNoise(
-    (x + 500) * continentalScale2, // Offset to create different pattern
-    (y + 300) * continentalScale2, 
+    (x + width * 0.5) * continentalScale2, // Offset to create different pattern
+    (y + height * 0.3) * continentalScale2, 
     3, 0.5
   );
   
@@ -181,9 +193,8 @@ function generateTileAt(x: number, y: number, seed: string): Tile {
   // Coastal complexity for realistic coastlines
   const coastalComplexity = coastalNoise.octaveNoise(x * coastalScale, y * coastalScale, 4, 0.4);
   
-  // Combine continental patterns - usually creates 2 major continents
-  // Use max to create separate continent clusters rather than blending
-  const mainContinental = Math.max(continentalPattern1 * 0.8, continentalPattern2 * 0.6);
+  // Combine continental patterns with island falloff
+  const mainContinental = Math.max(continentalPattern1 * 0.8, continentalPattern2 * 0.6) * falloffFactor;
   
   // Combine all elevation sources
   let baseLand = mainContinental + regionalElevation * 0.2 + coastalComplexity * 0.12;
@@ -191,12 +202,11 @@ function generateTileAt(x: number, y: number, seed: string): Tile {
   // Normalize to 0-1 range
   elevation = (baseLand + 1) / 2;
   
-  // Apply power curve to create clearer land/ocean distinction and target ~45% land
-  // Adjust the curve to create the right land ratio
-  elevation = Math.pow(elevation, 1.1); // Less aggressive than before to increase land ratio
+  // Apply power curve to create clearer land/ocean distinction
+  elevation = Math.pow(elevation, 1.1);
   
-  // Threshold adjustment for ~45% land coverage
-  const landThreshold = 0.25; // Lower threshold = more land
+  // Threshold adjustment for ~40% land coverage with island falloff
+  const landThreshold = 0.25;
   
   if (elevation > landThreshold) {
     // Land areas - enhance elevation and add mountain ranges
@@ -229,7 +239,7 @@ function generateTileAt(x: number, y: number, seed: string): Tile {
   moisture = Math.max(0, Math.min(1, moisture)); // Clamp to 0-1
   
   // Determine biome based on climate and elevation
-  const biome = getBiome(temperature, moisture, elevation);
+  const biome = getBiome(temperature, moisture, elevation, isRiver, isLake);
   
   return {
     type: biome,
@@ -242,15 +252,122 @@ function generateTileAt(x: number, y: number, seed: string): Tile {
 }
 
 /**
- * Calculate optimal page size to stay under 6MB limit for 1000x1000 maps
+ * Simple river network generation based on elevation gradients
+ * Rivers flow from high elevation to low elevation (toward ocean)
  */
-function calculateOptimalPageSize(): number {
+function generateRiverNetwork(elevationMap: number[][], width: number, height: number, seed: string): { rivers: Set<string>, lakes: Set<string> } {
+  const rivers = new Set<string>();
+  const lakes = new Set<string>();
+  const riverNoise = new DeterministicPerlinNoise(seed + '_rivers');
+  
+  // Helper function to get elevation at coordinates
+  const getElevation = (x: number, y: number): number => {
+    if (x < 0 || x >= width || y < 0 || y >= height) return 0;
+    return elevationMap[y][x];
+  };
+  
+  // Helper to encode coordinates as string
+  const coordKey = (x: number, y: number) => `${x},${y}`;
+  
+  // Find potential river sources (high elevation areas)
+  const riverSources: Array<{x: number, y: number, elevation: number}> = [];
+  
+  for (let y = Math.floor(height * 0.2); y < Math.floor(height * 0.8); y += 8) {
+    for (let x = Math.floor(width * 0.2); x < Math.floor(width * 0.8); x += 8) {
+      const elevation = getElevation(x, y);
+      
+      // Only start rivers from reasonably high elevation
+      if (elevation > 0.6) {
+        // Use noise to determine if this should be a river source
+        const riverChance = riverNoise.noise(x * 0.01, y * 0.01);
+        if (riverChance > 0.3) {
+          riverSources.push({ x, y, elevation });
+        }
+      }
+    }
+  }
+  
+  // Sort sources by elevation (highest first)
+  riverSources.sort((a, b) => b.elevation - a.elevation);
+  
+  // Limit number of river sources to prevent overcrowding
+  const maxRivers = Math.min(8, Math.floor(Math.sqrt(width * height) / 50));
+  const selectedSources = riverSources.slice(0, maxRivers);
+  
+  // Generate rivers from each source
+  for (const source of selectedSources) {
+    let currentX = source.x;
+    let currentY = source.y;
+    const visited = new Set<string>();
+    const riverPath: Array<{x: number, y: number}> = [];
+    
+    // Follow downhill gradient to create river
+    for (let step = 0; step < 200; step++) {
+      const key = coordKey(currentX, currentY);
+      
+      if (visited.has(key)) break; // Avoid loops
+      visited.add(key);
+      
+      const currentElevation = getElevation(currentX, currentY);
+      
+      // Stop if we reach ocean level
+      if (currentElevation < 0.25) break;
+      
+      riverPath.push({ x: currentX, y: currentY });
+      
+      // Find steepest downhill direction
+      let bestX = currentX;
+      let bestY = currentY;
+      let bestElevation = currentElevation;
+      
+      // Check 8 directions
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          if (dx === 0 && dy === 0) continue;
+          
+          const nextX = currentX + dx;
+          const nextY = currentY + dy;
+          const nextElevation = getElevation(nextX, nextY);
+          
+          // Find the lowest adjacent elevation
+          if (nextElevation < bestElevation) {
+            bestX = nextX;
+            bestY = nextY;
+            bestElevation = nextElevation;
+          }
+        }
+      }
+      
+      // If no downhill path found, this might be a lake location
+      if (bestX === currentX && bestY === currentY) {
+        if (currentElevation > 0.35 && currentElevation < 0.7) {
+          lakes.add(key);
+        }
+        break;
+      }
+      
+      currentX = bestX;
+      currentY = bestY;
+    }
+    
+    // Add river path to rivers set
+    for (const point of riverPath) {
+      rivers.add(coordKey(point.x, point.y));
+    }
+  }
+  
+  return { rivers, lakes };
+}
+
+/**
+ * Calculate optimal page size based on map dimensions
+ */
+function calculateOptimalPageSize(width: number): number {
   // Each compact tile is roughly 25 bytes when JSON stringified
   // 6MB = 6 * 1024 * 1024 = 6,291,456 bytes
   // Add overhead for response metadata (~1000 bytes)
   const maxPayloadSize = 6 * 1024 * 1024 - 1000;
   const bytesPerTile = 25;
-  const width = 1000; // Fixed width
   const bytesPerRow = width * bytesPerTile;
   
   // Calculate max rows that fit in 6MB
@@ -261,17 +378,13 @@ function calculateOptimalPageSize(): number {
 }
 
 /**
- * Generate a page of map data using stateless, deterministic generation for 1000x1000 maps
+ * Generate a page of map data using stateless, deterministic generation with configurable map size
  */
 export function generateMapPage(request: MapPageRequest): MapPageResponse {
-  const { page, pageSize, seed } = request;
-  
-  // Fixed dimensions for all maps
-  const width = 1000;
-  const height = 1000;
+  const { page, pageSize, seed, width = 1000, height = 1000 } = request;
   
   // Calculate optimal page size if requested size would exceed 6MB
-  const optimalPageSize = calculateOptimalPageSize();
+  const optimalPageSize = calculateOptimalPageSize(width);
   const actualPageSize = Math.min(pageSize, optimalPageSize);
   
   const totalPages = Math.ceil(height / actualPageSize);
@@ -283,13 +396,48 @@ export function generateMapPage(request: MapPageRequest): MapPageResponse {
     throw new Error(`Invalid page ${page}. Must be between 0 and ${totalPages - 1}`);
   }
   
+  // Generate elevation map for the entire area needed for this page (for river calculation)
+  // We need a broader context for river generation
+  const contextStartY = Math.max(0, startY - 50);
+  const contextEndY = Math.min(height, endY + 50);
+  const elevationMap: number[][] = [];
+  
+  for (let y = contextStartY; y < contextEndY; y++) {
+    const row: number[] = [];
+    for (let x = 0; x < width; x++) {
+      // Generate just elevation for river calculation
+      const tempTile = generateTileAt(x, y, width, height, seed, new Set(), new Set());
+      row.push(tempTile.elevation);
+    }
+    elevationMap.push(row);
+  }
+  
+  // Generate rivers and lakes for this context area
+  const { rivers, lakes } = generateRiverNetwork(elevationMap, width, contextEndY - contextStartY, seed);
+  
+  // Adjust river/lake coordinates to global coordinates
+  const globalRivers = new Set<string>();
+  const globalLakes = new Set<string>();
+  
+  rivers.forEach(coord => {
+    const [x, localY] = coord.split(',').map(Number);
+    const globalY = localY + contextStartY;
+    globalRivers.add(`${x},${globalY}`);
+  });
+  
+  lakes.forEach(coord => {
+    const [x, localY] = coord.split(',').map(Number);
+    const globalY = localY + contextStartY;
+    globalLakes.add(`${x},${globalY}`);
+  });
+  
   // Generate tiles for this page
   const tiles: CompactTile[][] = [];
   
   for (let y = startY; y < endY; y++) {
     const row: CompactTile[] = [];
     for (let x = 0; x < width; x++) {
-      const tile = generateTileAt(x, y, seed);
+      const tile = generateTileAt(x, y, width, height, seed, globalRivers, globalLakes);
       row.push(tileToCompact(tile));
     }
     tiles.push(row);
@@ -315,7 +463,7 @@ export function generateMapPage(request: MapPageRequest): MapPageResponse {
  * Validate that a map page request is within reasonable limits
  */
 export function validateMapPageRequest(request: MapPageRequest): void {
-  const { page, pageSize, seed } = request;
+  const { page, pageSize, seed, width = 1000, height = 1000 } = request;
   
   if (!seed || seed.length === 0) {
     throw new Error('Seed is required');
@@ -327,5 +475,13 @@ export function validateMapPageRequest(request: MapPageRequest): void {
   
   if (page < 0) {
     throw new Error('Page must be non-negative');
+  }
+  
+  if (width < 100 || width > 2000) {
+    throw new Error('Width must be between 100 and 2000');
+  }
+  
+  if (height < 100 || height > 2000) {
+    throw new Error('Height must be between 100 and 2000');
   }
 }

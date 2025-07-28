@@ -95,18 +95,22 @@ router.get('/test-map', async (req, res) => {
 // Paginated map generation endpoint
 router.get('/map', (req, res) => {
   try {
-    // Parse query parameters - only page, pageSize, and seed matter
+    // Parse query parameters
     const page = parseInt(req.query.page as string) || 0;
     const pageSize = parseInt(req.query.pageSize as string) || 64;
     const seed = req.query.seed as string || 'default';
+    const width = parseInt(req.query.width as string) || 1000;
+    const height = parseInt(req.query.height as string) || 1000;
 
     const request: MapPageRequest = {
       page,
       pageSize,
-      seed
+      seed,
+      width,
+      height
     };
 
-    console.log(`[Paginated Map] Request: page=${page}, pageSize=${pageSize}, seed=${seed} (fixed 1000x1000)`);
+    console.log(`[Paginated Map] Request: page=${page}, pageSize=${pageSize}, seed=${seed}, ${width}x${height}`);
 
     // Validate request
     validateMapPageRequest(request);

@@ -4,6 +4,8 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Get input elements
   const seedInput = document.getElementById('seed-input');
+  const widthInput = document.getElementById('width-input');
+  const heightInput = document.getElementById('height-input');
   const pagesizeInput = document.getElementById('pagesize-input');
   const seedDisplay = document.getElementById('seed-display');
   const currentSeedSpan = document.getElementById('current-seed');
@@ -57,6 +59,8 @@ document.addEventListener('DOMContentLoaded', () => {
         seed = generateRandomSeed();
       }
       
+      const width = parseInt(widthInput.value) || 1000;
+      const height = parseInt(heightInput.value) || 1000;
       const pageSize = parseInt(pagesizeInput.value) || 64;
       
       // Display the seed being used
@@ -64,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
       seedDisplay.style.display = 'flex';
       
       // Start paginated map generation
-      await generatePaginatedMap({ seed, pageSize });
+      await generatePaginatedMap({ seed, width, height, pageSize });
       
     } catch (error) {
       console.error('Error generating paginated map:', error);
@@ -78,18 +82,16 @@ document.addEventListener('DOMContentLoaded', () => {
   /**
    * Generate map using paginated API
    */
-  async function generatePaginatedMap({ seed, pageSize }) {
+  async function generatePaginatedMap({ seed, width, height, pageSize }) {
     return new Promise(async (resolve, reject) => {
       try {
         mapContainer.innerHTML = '';
         
-        // Fixed dimensions for 1000x1000 maps
-        const width = 1000;
-        const height = 1000;
+        // Use configurable dimensions
         // Biome types for converting compact format
         const BIOME_TYPES = [
           'ocean', 'shallow_water', 'beach', 'desert', 'grassland',
-          'forest', 'tundra', 'mountain', 'snow', 'swamp'
+          'forest', 'tundra', 'mountain', 'snow', 'swamp', 'river', 'lake'
         ];
 
         // Color mapping for biomes
@@ -103,7 +105,9 @@ document.addEventListener('DOMContentLoaded', () => {
           tundra: '#f3f4f6',
           mountain: '#6b7280',
           snow: '#ffffff',
-          swamp: '#059669'
+          swamp: '#059669',
+          river: '#0891b2',
+          lake: '#0e7490'
         };
 
         // Create progress indicator with modern styling
@@ -138,7 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Fetch first page to determine total pages
         progressText.textContent = 'Fetching first page...';
-        const firstPageUrl = `/api/map?page=0&pageSize=${pageSize}&seed=${encodeURIComponent(seed)}`;
+        const firstPageUrl = `/api/map?page=0&pageSize=${pageSize}&seed=${encodeURIComponent(seed)}&width=${width}&height=${height}`;
         const firstResponse = await fetch(firstPageUrl);
         
         if (!firstResponse.ok) {
@@ -197,7 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let page = 1; page < totalPages; page++) {
           try {
             progressText.textContent = `Fetching page ${page + 1}...`;
-            const pageUrl = `/api/map?page=${page}&pageSize=${pageSize}&seed=${encodeURIComponent(seed)}`;
+            const pageUrl = `/api/map?page=${page}&pageSize=${pageSize}&seed=${encodeURIComponent(seed)}&width=${width}&height=${height}`;
             const response = await fetch(pageUrl);
             
             if (!response.ok) {

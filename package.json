@@ -12,7 +12,8 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:preview": "node scripts/test-e2e-preview.js",
     "test:install": "playwright install",
-    "test:report": "playwright show-report"
+    "test:report": "playwright show-report",
+    "post-pr-comment": "node scripts/post-pr-comment.cjs"
   },
   "keywords": [
     "game",

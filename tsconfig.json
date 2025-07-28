@@ -11,7 +11,8 @@
   },
   "include": [
     "src/**/*",
-    "netlify/functions/**/*"
+    "netlify/functions/**/*",
+    "scripts/**/*"
   ],
   "exclude": [
     "node_modules"

@@ -218,31 +218,49 @@ document.addEventListener('DOMContentLoaded', () => {
 
         updateProgress();
 
-        // Fetch remaining pages sequentially
-        for (let page = 1; page < totalPages; page++) {
-          try {
-            progressText.textContent = `Fetching page ${page + 1}...`;
+        // Fetch remaining pages in parallel with concurrency limit for improved performance
+        // Using batched parallel requests instead of sequential to reduce total generation time
+        const concurrencyLimit = 10; // Limit concurrent requests to avoid overwhelming the server
+        const remainingPages = Array.from({length: totalPages - 1}, (_, i) => i + 1);
+        
+        // Process pages in parallel batches
+        for (let i = 0; i < remainingPages.length; i += concurrencyLimit) {
+          const batch = remainingPages.slice(i, i + concurrencyLimit);
+          progressText.textContent = `Fetching pages ${batch[0] + 1}-${batch[batch.length - 1] + 1}...`;
+          
+          // Create parallel fetch promises for this batch
+          const batchPromises = batch.map(async (page) => {
             const pageUrl = `/api/map?page=${page}&pageSize=${pageSize}&seed=${encodeURIComponent(seed)}`;
             const response = await fetch(pageUrl);
             
             if (!response.ok) {
               const error = await response.json();
-              throw new Error(error.error || `HTTP ${response.status}`);
+              throw new Error(`Page ${page}: ${error.error || `HTTP ${response.status}`}`);
             }
 
             const pageData = await response.json();
+            return { page, pageData };
+          });
+
+          try {
+            // Wait for all pages in this batch to complete
+            const batchResults = await Promise.all(batchPromises);
             
-            // Render page
-            renderPage(pageData);
+            // Sort by page number to ensure correct rendering order
+            batchResults.sort((a, b) => a.page - b.page);
+            
+            // Render pages in order
+            for (const { pageData } of batchResults) {
+              renderPage(pageData);
+              pagesComplete++;
+              updateProgress();
+            }
 
-            pagesComplete++;
-            updateProgress();
-
-            // Small delay to allow UI updates
+            // Small delay to allow UI updates between batches
             await new Promise(resolve => setTimeout(resolve, 10));
 
           } catch (error) {
-            console.error(`Failed to fetch page ${page}:`, error);
+            console.error(`Failed to fetch batch starting at page ${batch[0]}:`, error);
             throw error;
           }
         }

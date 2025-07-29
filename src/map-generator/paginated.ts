@@ -87,16 +87,17 @@ class DeterministicPerlinNoise {
 
 /**
  * Determines biome based on temperature, moisture, and elevation
- * Updated for clearer ocean/land separation
+ * Consistent with the original map generator for proper ocean/land separation
+ * Fixed to match thresholds in index.ts to ensure consistent rendering between generators
  */
 function getBiome(temperature: number, moisture: number, elevation: number): BiomeType {
-  // Ocean and shallow water based on elevation - adjusted for clearer separation
-  if (elevation < 0.3) {
-    return elevation < 0.2 ? 'ocean' : 'shallow_water';
+  // Ocean and shallow water based on elevation - consistent with original generator
+  if (elevation < 0.25) {
+    return elevation < 0.15 ? 'ocean' : 'shallow_water';
   }
   
-  // Beach areas just above water - narrower band for clearer separation
-  if (elevation < 0.35) {
+  // Beach areas just above water
+  if (elevation < 0.3) {
     return 'beach';
   }
   

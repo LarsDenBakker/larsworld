@@ -175,11 +175,134 @@ function generateTileAt(x: number, y: number, seed: string): Tile {
     return generateClimateAndBiome(x, y, elevation, seed, width, height, temperatureNoise, moistureNoise, temperatureScale, moistureScale);
   }
   
-  // Normalize coordinates to -1 to 1 range for continental distribution
-  const nx = (x / width) * 2 - 1;
-  const ny = (y / height) * 2 - 1;
+  // Discrete continent placement approach for realistic geography
+  // Start with ocean base and build up specific continents
   
-  // Calculate fade factor for areas near but not at edges
+  // Define potential continent centers based on seed
+  const seedHash = hashSeed(seed);
+  const continentConfigs = [];
+  
+  // Primary continent (always present) - positioned in one quadrant
+  const quadrant = seedHash % 4;
+  let primary_x, primary_y;
+  
+  switch (quadrant) {
+    case 0: // Northwest
+      primary_x = 200 + (seedHash % 150);
+      primary_y = 200 + ((seedHash >> 8) % 150);
+      break;
+    case 1: // Northeast  
+      primary_x = 650 + (seedHash % 150);
+      primary_y = 200 + ((seedHash >> 8) % 150);
+      break;
+    case 2: // Southwest
+      primary_x = 200 + (seedHash % 150);
+      primary_y = 650 + ((seedHash >> 8) % 150);
+      break;
+    case 3: // Southeast
+      primary_x = 650 + (seedHash % 150);
+      primary_y = 650 + ((seedHash >> 8) % 150);
+      break;
+  }
+  
+  continentConfigs.push({
+    centerX: primary_x,
+    centerY: primary_y,
+    radius: 80 + (seedHash % 40), // Small: 80-120 pixels
+    strength: 1.0,
+    noiseOffset: 0
+  });
+  
+  // Secondary continent (60% chance) - positioned in opposite corner
+  if ((seedHash % 100) < 60) {
+    const opposite_quadrant = (quadrant + 2) % 4;
+    let secondary_x, secondary_y;
+    
+    switch (opposite_quadrant) {
+      case 0: // Northwest
+        secondary_x = 200 + ((seedHash >> 16) % 150);
+        secondary_y = 200 + ((seedHash >> 20) % 150);
+        break;
+      case 1: // Northeast  
+        secondary_x = 650 + ((seedHash >> 16) % 150);
+        secondary_y = 200 + ((seedHash >> 20) % 150);
+        break;
+      case 2: // Southwest
+        secondary_x = 200 + ((seedHash >> 16) % 150);
+        secondary_y = 650 + ((seedHash >> 20) % 150);
+        break;
+      case 3: // Southeast
+        secondary_x = 650 + ((seedHash >> 16) % 150);
+        secondary_y = 650 + ((seedHash >> 20) % 150);
+        break;
+    }
+    
+    continentConfigs.push({
+      centerX: secondary_x,
+      centerY: secondary_y,
+      radius: 60 + ((seedHash >> 12) % 30), // Smaller: 60-90 pixels
+      strength: 0.8,
+      noiseOffset: 500
+    });
+  }
+  
+  // Very small third continent (20% chance) - in remaining space
+  if ((seedHash % 100) < 20) {
+    const third_x = 400 + ((seedHash >> 24) % 200);
+    const third_y = 400 + ((seedHash >> 28) % 200);
+    
+    // Check it's not too close to existing continents
+    let minSeparation = Infinity;
+    for (const config of continentConfigs) {
+      const sep = Math.sqrt(Math.pow(third_x - config.centerX, 2) + Math.pow(third_y - config.centerY, 2));
+      minSeparation = Math.min(minSeparation, sep);
+    }
+    
+    if (minSeparation > 200) {
+      continentConfigs.push({
+        centerX: third_x,
+        centerY: third_y,
+        radius: 40 + (seedHash % 20), // Very small: 40-60 pixels
+        strength: 0.6,
+        noiseOffset: 1000
+      });
+    }
+  }
+  
+  // Calculate elevation based on closest continent
+  let elevation = 0; // Start with ocean
+  
+  for (const continent of continentConfigs) {
+    const dx = x - continent.centerX;
+    const dy = y - continent.centerY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance < continent.radius) {
+      // Inside continent influence
+      const normalizedDistance = distance / continent.radius;
+      
+      // Create smooth falloff from center to edge
+      const baseLandHeight = (1 - Math.pow(normalizedDistance, 2.0)) * continent.strength; // Steeper falloff
+      
+      // Add fractal detail for realistic coastlines
+      const fractalNoise = continentalNoise.octaveNoise(
+        (x + continent.noiseOffset) * continentalScale * 2, 
+        (y + continent.noiseOffset) * continentalScale * 2, 
+        4, 0.5
+      );
+      
+      // Apply fractal variation, strongest at coastlines
+      const coastlineVariation = normalizedDistance * (1 - normalizedDistance) * 4; // Peaks at 0.5 distance
+      const fractalInfluence = fractalNoise * coastlineVariation * 0.2; // Reduced influence
+      
+      const continentElevation = Math.max(0, baseLandHeight + fractalInfluence);
+      
+      // Use the highest elevation from any continent (no blending)
+      elevation = Math.max(elevation, continentElevation);
+    }
+  }
+  
+  // Calculate fade factor for areas near but not at edges  
   const fadeDistance = oceanBorderWidth * 1.5; // 75 pixel fade zone
   let borderFade = 1;
   if (distanceFromEdge < oceanBorderWidth + fadeDistance) {
@@ -187,64 +310,8 @@ function generateTileAt(x: number, y: number, seed: string): Tile {
     borderFade = Math.pow(borderFade, 1.5); // Stronger fade curve
   }
   
-  // Create multiple continental cores with strong separation
-  // Continental core 1 - Northwest region (primary)
-  const core1CenterX = -0.5;
-  const core1CenterY = -0.4;
-  const core1Distance = Math.sqrt(Math.pow(nx - core1CenterX, 2) + Math.pow(ny - core1CenterY, 2));
-  const core1Radius = 0.4; // Smaller, more distinct continents
-  const core1Strength = Math.max(0, 1.5 - (core1Distance / core1Radius) * 2.5); // Steeper falloff
-  const core1Noise = continentalNoise.octaveNoise(x * continentalScale, y * continentalScale, 4, 0.6);
-  const continent1 = Math.max(0, core1Strength * (0.8 + core1Noise * 0.3)) * borderFade;
-  
-  // Continental core 2 - Southeast region (secondary)
-  const core2CenterX = 0.4;
-  const core2CenterY = 0.5;
-  const core2Distance = Math.sqrt(Math.pow(nx - core2CenterX, 2) + Math.pow(ny - core2CenterY, 2));
-  const core2Radius = 0.35; // Smaller continent  
-  const core2Strength = Math.max(0, 1.3 - (core2Distance / core2Radius) * 2.8); // Steeper falloff
-  const core2Noise = continentalNoise2.octaveNoise((x + 400) * continentalScale, (y + 300) * continentalScale, 4, 0.5);
-  const continent2 = Math.max(0, core2Strength * (0.7 + core2Noise * 0.3)) * borderFade;
-  
-  // Continental core 3 - Northeast region (smaller, occasional)
-  const core3CenterX = 0.2;
-  const core3CenterY = -0.3;
-  const core3Distance = Math.sqrt(Math.pow(nx - core3CenterX, 2) + Math.pow(ny - core3CenterY, 2));
-  const core3Radius = 0.25; // Small continent
-  const core3Strength = Math.max(0, 1.0 - (core3Distance / core3Radius) * 3.0); // Steeper falloff
-  const core3Noise = continentalNoise3.octaveNoise((x + 700) * continentalScale, (y + 100) * continentalScale, 3, 0.4);
-  // Make this continent seed-dependent - some seeds won't have it
-  const core3Seed = Math.abs(Math.sin(hashSeed(seed + '_core3') * 0.001)) > 0.5 ? 1 : 0;
-  const continent3 = Math.max(0, core3Strength * core3Seed * (0.6 + core3Noise * 0.25)) * borderFade;
-  
-  // Continental separator - creates ocean trenches between continents
-  const separatorNoise = continentalNoise.octaveNoise(x * continentalScale * 0.5, y * continentalScale * 0.5, 2, 0.4);
-  
-  // Create strong ocean channels in key separation areas
-  let oceanSeparator = 0;
-  
-  // Vertical separator between NW and NE continents (around x = 0)
-  const verticalSepDistance = Math.abs(nx - 0.0) + Math.abs(ny - 0.0); // Distance from center
-  if (verticalSepDistance < 0.8) {
-    oceanSeparator = Math.max(oceanSeparator, 0.4 - verticalSepDistance * 0.3);
-  }
-  
-  // Diagonal separator between NW and SE continents
-  const diagonalSepDistance = Math.abs((nx + ny) * 0.7); // Diagonal line
-  if (diagonalSepDistance < 0.6) {
-    oceanSeparator = Math.max(oceanSeparator, 0.3 - diagonalSepDistance * 0.4);
-  }
-  
-  // Use MAXIMUM instead of additive to ensure true separation
-  // This ensures continents don't blend into each other
-  let continentalMass = Math.max(continent1, continent2, continent3);
-  
-  // Apply ocean separator to create gaps between continents
-  continentalMass = Math.max(0, continentalMass - oceanSeparator * 1.5);
-  
-  // Add some variation but keep it very subtle to maintain separation
-  const continentalVariation = continentalNoise.octaveNoise(x * continentalScale * 3, y * continentalScale * 3, 2, 0.2);
-  continentalMass += continentalVariation * 0.05; // Very reduced influence
+  // Apply border fade
+  elevation *= borderFade;
   
   // Regional elevation variations for terrain complexity
   const regionalElevation = elevationNoise.octaveNoise(x * elevationScale, y * elevationScale, 6, 0.5);
@@ -252,8 +319,13 @@ function generateTileAt(x: number, y: number, seed: string): Tile {
   // Coastal complexity for natural coastlines
   const coastalComplexity = coastalNoise.octaveNoise(x * coastalScale, y * coastalScale, 4, 0.4);
   
-  // Combine elevation sources
-  let elevation = continentalMass + regionalElevation * 0.15 + coastalComplexity * 0.1;
+  // Add regional detail only to land areas
+  if (elevation > 0.2) {
+    elevation += regionalElevation * 0.15 + coastalComplexity * 0.1;
+  } else {
+    // Ocean areas get subtle seafloor variation
+    elevation += (regionalElevation + coastalComplexity) * 0.05;
+  }
   
   // Normalize elevation to reasonable range
   elevation = Math.max(0, Math.min(1.5, elevation));

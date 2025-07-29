@@ -1,195 +1,320 @@
-import { generateMap } from '../dist/src/map-generator/index.js';
+import { generateMapPage } from '../dist/src/map-generator/paginated.js';
+import { compactToTile, BIOME_TYPES } from '../dist/src/shared/types.js';
 
 /**
- * Unit tests for map generation, focusing on continent/ocean boundary conditions
- * and biome designation correctness for small map sizes
+ * Unit tests for paginated map generation, focusing on Dwarf Fortress-style 
+ * continent/ocean boundary conditions and biome designation correctness
  */
 
 /**
- * Test that all edge tiles are ocean for various small map sizes
+ * Generate a complete small map from the paginated generator for testing
  */
-export function testOceanBoundaries() {
-  const testSizes = [
-    { width: 20, height: 20 },
-    { width: 50, height: 50 },
-    { width: 30, height: 40 }, // Non-square map
-    { width: 10, height: 10 }, // Very small map
-  ];
-
-  for (const { width, height } of testSizes) {
-    console.log(`Testing ${width}x${height} map for ocean boundaries...`);
-    
-    const map = generateMap(width, height);
-    
-    // Collect all edge tiles
-    const edgeTiles = [];
-    
-    // Top and bottom edges
+function generateCompleteMap(width, height, seed) {
+  // For testing, we'll generate a smaller map by scaling coordinates
+  const map = [];
+  
+  for (let y = 0; y < height; y++) {
+    const row = [];
     for (let x = 0; x < width; x++) {
-      edgeTiles.push({ x, y: 0, type: map[0][x].type });
-      edgeTiles.push({ x, y: height - 1, type: map[height - 1][x].type });
+      // Scale coordinates to 1000x1000 space for consistent generation
+      const scaledX = Math.floor(x * (1000 / width));
+      const scaledY = Math.floor(y * (1000 / height));
+      
+      // Generate a single page with just this tile
+      const pageResponse = generateMapPage({
+        page: Math.floor(scaledY / 10), // Use small page size for individual tiles
+        pageSize: 10,
+        seed
+      });
+      
+      // Extract the specific tile from the response
+      const pageY = scaledY % 10;
+      const compactTile = pageResponse.tiles[pageY][scaledX];
+      const tile = compactToTile(compactTile, x, y);
+      
+      row.push(tile);
     }
-    
-    // Left and right edges (excluding corners already counted)
-    for (let y = 1; y < height - 1; y++) {
-      edgeTiles.push({ x: 0, y, type: map[y][0].type });
-      edgeTiles.push({ x: width - 1, y, type: map[y][width - 1].type });
-    }
-    
-    const nonOceanEdges = edgeTiles.filter(tile => tile.type !== 'ocean');
-    
-    if (nonOceanEdges.length === 0) {
-      console.log(`✓ PASS: All ${edgeTiles.length} edge tiles are ocean`);
-    } else {
-      console.log(`✗ FAIL: ${nonOceanEdges.length} out of ${edgeTiles.length} edge tiles are not ocean`);
-      console.log('Non-ocean edge tiles:', nonOceanEdges.slice(0, 5)); // Show first 5 failures
-      return false;
-    }
+    map.push(row);
   }
   
-  return true;
+  return map;
 }
 
 /**
- * Test biome distribution sanity for small maps
+ * Test that all edge tiles are ocean for the paginated generator
  */
-export function testBiomeDistribution() {
-  const testSizes = [
-    { width: 20, height: 20 },
-    { width: 50, height: 50 }
-  ];
-
-  for (const { width, height } of testSizes) {
-    console.log(`Testing ${width}x${height} map for biome distribution...`);
-    
-    const map = generateMap(width, height);
-    const totalTiles = width * height;
-    
-    // Count biomes
-    const biomeCounts = {};
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const biome = map[y][x].type;
-        biomeCounts[biome] = (biomeCounts[biome] || 0) + 1;
-      }
+export function testPaginatedOceanBoundaries() {
+  console.log('Testing paginated generator ocean boundaries...');
+  
+  // Test with the actual 1000x1000 map by checking edge pages
+  const seed = 'test_ocean_boundaries';
+  
+  // Check first row (top edge)
+  const topPage = generateMapPage({ page: 0, pageSize: 1, seed });
+  const topRow = topPage.tiles[0];
+  
+  // Check last row (bottom edge) 
+  const bottomPage = generateMapPage({ page: 999, pageSize: 1, seed });
+  const bottomRow = bottomPage.tiles[0];
+  
+  let allEdgesOcean = true;
+  let nonOceanCount = 0;
+  
+  // Check top and bottom edges
+  for (let x = 0; x < 1000; x++) {
+    if (BIOME_TYPES[topRow[x].b] !== 'ocean') {
+      allEdgesOcean = false;
+      nonOceanCount++;
     }
-    
-    // Must have ocean
-    if (!biomeCounts.ocean || biomeCounts.ocean === 0) {
-      console.log(`✗ FAIL: No ocean tiles found in ${width}x${height} map`);
-      return false;
+    if (BIOME_TYPES[bottomRow[x].b] !== 'ocean') {
+      allEdgesOcean = false;
+      nonOceanCount++;
     }
-    
-    // Ocean should be significant portion (at least 20% for boundary enforcement)
-    const oceanPercentage = (biomeCounts.ocean / totalTiles) * 100;
-    if (oceanPercentage < 20) {
-      console.log(`✗ FAIL: Only ${oceanPercentage.toFixed(1)}% ocean, expected at least 20%`);
-      return false;
-    }
-    
-    // Should have some land biomes
-    const landBiomes = Object.keys(biomeCounts).filter(biome => 
-      biome !== 'ocean' && biome !== 'shallow_water'
-    );
-    if (landBiomes.length === 0) {
-      console.log(`✗ FAIL: No land biomes found in ${width}x${height} map`);
-      return false;
-    }
-    
-    console.log(`✓ PASS: ${oceanPercentage.toFixed(1)}% ocean, ${landBiomes.length} land biome types`);
   }
   
-  return true;
+  // Check left and right edges by sampling middle rows
+  for (let pageNum = 100; pageNum < 900; pageNum += 100) {
+    const page = generateMapPage({ page: pageNum, pageSize: 1, seed });
+    const row = page.tiles[0];
+    
+    if (BIOME_TYPES[row[0].b] !== 'ocean') { // Left edge
+      allEdgesOcean = false;
+      nonOceanCount++;
+    }
+    if (BIOME_TYPES[row[999].b] !== 'ocean') { // Right edge
+      allEdgesOcean = false;
+      nonOceanCount++;
+    }
+  }
+  
+  if (allEdgesOcean) {
+    console.log('✓ PASS: All sampled edge tiles are ocean in 1000x1000 map');
+    return true;
+  } else {
+    console.log(`✗ FAIL: ${nonOceanCount} edge tiles are not ocean`);
+    return false;
+  }
 }
 
 /**
- * Test elevation constraints
+ * Test 5% ocean boundary requirement
  */
-export function testElevationConstraints() {
-  const map = generateMap(20, 20);
+export function testOceanBoundaryWidth() {
+  console.log('Testing 5% ocean boundary width requirement...');
   
-  // All edge tiles should have low elevation (ocean level)
-  for (let x = 0; x < 20; x++) {
-    if (map[0][x].elevation >= 0.25 || map[19][x].elevation >= 0.25) {
-      console.log(`✗ FAIL: Edge tile has elevation >= 0.25 (ocean threshold)`);
-      return false;
-    }
-  }
-  for (let y = 1; y < 19; y++) {
-    if (map[y][0].elevation >= 0.25 || map[y][19].elevation >= 0.25) {
-      console.log(`✗ FAIL: Edge tile has elevation >= 0.25 (ocean threshold)`);
-      return false;
-    }
-  }
+  const seed = 'test_boundary_width';
+  const requiredBoundaryWidth = 50; // 5% of 1000
   
-  // Interior should have more elevation variety
-  let hasHighElevation = false;
-  for (let y = 5; y < 15; y++) {
-    for (let x = 5; x < 15; x++) {
-      if (map[y][x].elevation > 0.5) {
-        hasHighElevation = true;
-        break;
+  // Check that tiles within 50 pixels of edge are ocean or very low elevation
+  let boundaryViolations = 0;
+  
+  // Sample several rows and columns near boundaries
+  for (let distance = 0; distance < requiredBoundaryWidth; distance += 10) {
+    // Check top boundary
+    const topPage = generateMapPage({ page: distance, pageSize: 1, seed });
+    const topRow = topPage.tiles[0];
+    
+    for (let x = 0; x < 1000; x += 100) { // Sample every 100th pixel
+      const tile = compactToTile(topRow[x], x, distance);
+      if (tile.type !== 'ocean' && tile.type !== 'shallow_water') {
+        boundaryViolations++;
       }
     }
-    if (hasHighElevation) break;
+    
+    // Check left boundary (sample middle rows)
+    if (distance < 10) { // Only check for first few distances
+      const midPage = generateMapPage({ page: 500, pageSize: 1, seed });
+      const midRow = midPage.tiles[0];
+      const leftTile = compactToTile(midRow[distance], distance, 500);
+      
+      if (leftTile.type !== 'ocean' && leftTile.type !== 'shallow_water') {
+        boundaryViolations++;
+      }
+    }
   }
   
-  if (!hasHighElevation) {
-    console.log(`✗ FAIL: No high elevation found in interior`);
+  if (boundaryViolations === 0) {
+    console.log('✓ PASS: Ocean boundary width requirement met');
+    return true;
+  } else {
+    console.log(`✗ FAIL: ${boundaryViolations} boundary violations found`);
+    return false;
+  }
+}
+
+/**
+ * Test biome distribution for Dwarf Fortress style
+ */
+export function testDwarfFortressBiomeDistribution() {
+  console.log('Testing Dwarf Fortress-style biome distribution...');
+  
+  const seed = 'test_biome_distribution';
+  
+  // Sample biomes from several pages across the map
+  const biomeCounts = {};
+  let totalSamples = 0;
+  
+  // Sample from multiple pages to get a representative distribution
+  // Use valid page numbers (0-999 for 1000 height with pageSize 1)
+  const samplePages = [50, 150, 250, 350, 450, 550, 650, 750, 850, 950];
+  
+  for (const pageNum of samplePages) {
+    const page = generateMapPage({ page: pageNum, pageSize: 1, seed }); // 1-row pages
+    const row = page.tiles[0];
+    
+    for (let x = 0; x < 1000; x += 50) { // Sample every 50th pixel
+      const biome = BIOME_TYPES[row[x].b];
+      biomeCounts[biome] = (biomeCounts[biome] || 0) + 1;
+      totalSamples++;
+    }
+  }
+  
+  // Calculate percentages
+  const biomePercentages = {};
+  for (const [biome, count] of Object.entries(biomeCounts)) {
+    biomePercentages[biome] = (count / totalSamples) * 100;
+  }
+  
+  console.log('Biome distribution:', biomePercentages);
+  
+  // Validate DF-style distribution
+  let passed = true;
+  
+  // Ocean should be 30-70% (accounting for boundaries but allowing for diverse interiors)
+  if (!biomePercentages.ocean || biomePercentages.ocean < 30 || biomePercentages.ocean > 70) {
+    console.log(`✗ FAIL: Ocean percentage ${biomePercentages.ocean?.toFixed(1)}% not in range 30-70%`);
+    passed = false;
+  }
+  
+  // Land should be reasonable (forest + grassland should be most common land types)
+  const landBiomes = Object.keys(biomePercentages).filter(b => 
+    b !== 'ocean' && b !== 'shallow_water' && b !== 'beach'
+  );
+  
+  if (landBiomes.length < 3) {
+    console.log(`✗ FAIL: Only ${landBiomes.length} land biome types, expected at least 3`);
+    passed = false;
+  }
+  
+  // Some forest should exist on land
+  if (biomePercentages.forest && biomePercentages.forest > 0) {
+    console.log(`✓ Forest biome present: ${biomePercentages.forest.toFixed(1)}%`);
+  } else {
+    console.log(`✗ FAIL: No forest biome found`);
+    passed = false;
+  }
+  
+  if (passed) {
+    console.log('✓ PASS: Biome distribution meets DF-style requirements');
+  }
+  
+  return passed;
+}
+
+/**
+ * Test continent counting and separation (simplified for performance)
+ */
+export function testContinentCounting() {
+  console.log('Testing continent counting and separation...');
+  
+  const seed = 'test_continents';
+  
+  // Sample from multiple pages to get a better distribution
+  // Get the page size first
+  const testPage = generateMapPage({ page: 0, pageSize: 1, seed });
+  const actualPageSize = testPage.pageSize;
+  const totalPages = testPage.totalPages;
+  
+  console.log(`Map has ${totalPages} pages with page size ${actualPageSize}`);
+  
+  let landTiles = 0;
+  let totalTiles = 0;
+  
+  // Sample from several pages across the map
+  const pagesToSample = [Math.floor(totalPages * 0.25), Math.floor(totalPages * 0.5), Math.floor(totalPages * 0.75)];
+  
+  for (const pageNum of pagesToSample) {
+    const page = generateMapPage({ page: pageNum, pageSize: actualPageSize, seed });
+    
+    for (const row of page.tiles) {
+      for (let x = 0; x < 1000; x += 200) { // Sample including edge regions
+        const biome = BIOME_TYPES[row[x].b];
+        if (biome !== 'ocean' && biome !== 'shallow_water' && biome !== 'beach') {
+          landTiles++;
+        }
+        totalTiles++;
+      }
+    }
+  }
+  
+  const landPercentage = (landTiles / totalTiles) * 100;
+  console.log(`Found ${landTiles} land tiles out of ${totalTiles} sampled (${landPercentage.toFixed(1)}%)`);
+  
+  if (landTiles === 0) {
+    console.log('✗ FAIL: No land tiles found in sample area');
     return false;
   }
   
-  console.log(`✓ PASS: Edge elevations constrained, interior has variety`);
+  if (landPercentage < 10 || landPercentage > 90) {
+    console.log(`✗ FAIL: Land percentage ${landPercentage.toFixed(1)}% seems unreasonable`);
+    return false;
+  }
+  
+  // Check that we have both land and ocean in our sample
+  const oceanTiles = totalTiles - landTiles;
+  if (oceanTiles === 0) {
+    console.log(`✗ FAIL: No ocean tiles found in sample (need land/ocean separation)`);
+    return false;
+  }
+  
+  console.log(`✓ PASS: Land distribution reasonable (${landPercentage.toFixed(1)}% land across samples)`);
   return true;
 }
 
 /**
- * Test smooth transition from ocean to land
+ * Test toroidal wrap logic (left/right wrap but ocean boundaries)
  */
-export function testSmoothTransitions() {
-  const map = generateMap(30, 30);
+export function testToroidalWrapLogic() {
+  console.log('Testing toroidal wrap logic...');
   
-  // Check that there's a gradual transition from edges to interior
-  // Look at the 3rd row/column from edge (should be transition zone)
-  let hasTransitionTiles = false;
+  const seed = 'test_toroidal';
   
-  for (let x = 2; x < 28; x++) {
-    const tile = map[2][x];
-    if (tile.type === 'shallow_water' || tile.type === 'beach') {
-      hasTransitionTiles = true;
-      break;
+  // Test that left and right edges have ocean separation for toroidal wrapping
+  // Sample several rows
+  let wrapViolations = 0;
+  
+  for (let pageNum = 200; pageNum < 800; pageNum += 100) {
+    const page = generateMapPage({ page: pageNum, pageSize: 1, seed });
+    const row = page.tiles[0];
+    
+    const leftTile = compactToTile(row[0], 0, pageNum);
+    const rightTile = compactToTile(row[999], 999, pageNum);
+    
+    // Both left and right edges should be ocean for proper toroidal wrapping
+    if (leftTile.type !== 'ocean' || rightTile.type !== 'ocean') {
+      wrapViolations++;
     }
   }
   
-  if (!hasTransitionTiles) {
-    // Look for other transition indicators (low elevation but not ocean)
-    for (let x = 2; x < 28; x++) {
-      const tile = map[2][x];
-      if (tile.elevation < 0.35 && tile.type !== 'ocean') {
-        hasTransitionTiles = true;
-        break;
-      }
-    }
-  }
-  
-  if (hasTransitionTiles) {
-    console.log(`✓ PASS: Smooth transitions detected from ocean to land`);
+  if (wrapViolations === 0) {
+    console.log('✓ PASS: Toroidal wrap logic maintained with ocean boundaries');
+    return true;
   } else {
-    console.log(`? WARN: No clear transition zone detected (may be acceptable)`);
+    console.log(`✗ FAIL: ${wrapViolations} violations of toroidal wrap ocean requirement`);
+    return false;
   }
-  
-  return true;
 }
 
 // Run all tests
 export function runAllTests() {
-  console.log('Running Map Generation Unit Tests...\n');
+  console.log('Running Enhanced Map Generation Unit Tests...\n');
   
   const tests = [
-    { name: 'Ocean Boundaries', fn: testOceanBoundaries },
-    { name: 'Biome Distribution', fn: testBiomeDistribution },
-    { name: 'Elevation Constraints', fn: testElevationConstraints },
-    { name: 'Smooth Transitions', fn: testSmoothTransitions },
+    { name: 'Paginated Ocean Boundaries', fn: testPaginatedOceanBoundaries },
+    { name: 'Ocean Boundary Width (5%)', fn: testOceanBoundaryWidth },
+    { name: 'DF-Style Biome Distribution', fn: testDwarfFortressBiomeDistribution },
+    { name: 'Continent Counting', fn: testContinentCounting },
+    { name: 'Toroidal Wrap Logic', fn: testToroidalWrapLogic },
   ];
   
   let passed = 0;
@@ -201,6 +326,7 @@ export function runAllTests() {
       }
     } catch (error) {
       console.log(`✗ FAIL: ${test.name} threw error:`, error.message);
+      console.log('Stack:', error.stack);
     }
   }
   

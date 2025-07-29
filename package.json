@@ -8,11 +8,13 @@
     "start": "node --loader ts-node/esm src/server/local.ts",
     "build": "tsc",
     "test": "npm run test:e2e",
+    "test:unit": "node tests/unit-map-generation.js",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:preview": "node scripts/test-e2e-preview.js",
     "test:install": "playwright install",
     "test:report": "playwright show-report",
+    "generate:screenshots": "node scripts/generate-map-screenshots.js",
     "post-pr-comment": "node scripts/post-pr-comment.cjs"
   },
   "keywords": [

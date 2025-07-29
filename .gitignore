@@ -19,3 +19,6 @@ pnpm-debug.log*
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Generated map screenshots (these are large binary files)
+/map-screenshots/

@@ -87,61 +87,71 @@ class DeterministicPerlinNoise {
 
 /**
  * Determines biome based on temperature, moisture, and elevation
- * Updated for clearer ocean/land separation
+ * Updated for Dwarf Fortress-style biome distribution with clearer ocean/land separation
  */
 function getBiome(temperature: number, moisture: number, elevation: number): BiomeType {
-  // Ocean and shallow water based on elevation - adjusted for clearer separation
-  if (elevation < 0.3) {
-    return elevation < 0.2 ? 'ocean' : 'shallow_water';
+  // Ocean and shallow water based on elevation - strict thresholds for clear separation
+  if (elevation < 0.35) {
+    return elevation < 0.25 ? 'ocean' : 'shallow_water';
   }
   
-  // Beach areas just above water - narrower band for clearer separation
-  if (elevation < 0.35) {
+  // Beach areas just above water - narrow band for clear separation
+  if (elevation < 0.4) {
     return 'beach';
   }
   
-  // Snow-capped mountains
-  if (elevation > 0.85) {
+  // Snow-capped mountains (higher threshold for more selectivity)
+  if (elevation > 0.9) {
     return 'snow';
   }
   
-  // High mountains
+  // High mountains - more common than snow peaks but still rare
   if (elevation > 0.75) {
     return 'mountain';
   }
   
-  // Tundra in cold areas
-  if (temperature < 0.25) {
+  // Tundra in cold areas - more prevalent in DF style
+  if (temperature < 0.3) {
     return 'tundra';
   }
   
-  // Desert in hot, dry areas
-  if (temperature > 0.7 && moisture < 0.4) {
+  // Desert in hot, dry areas - adjusted for DF frequency
+  if (temperature > 0.65 && moisture < 0.45) {
     return 'desert';
   }
   
-  // Swamp in hot, very wet areas with low elevation
-  if (temperature > 0.6 && moisture > 0.8 && elevation < 0.5) {
+  // Swamp in hot, very wet areas with low elevation - less common
+  if (temperature > 0.7 && moisture > 0.85 && elevation < 0.6) {
     return 'swamp';
   }
   
-  // Forest in moderate to high moisture
-  if (moisture > 0.6) {
+  // Forest in moderate to high moisture - most common land biome in DF
+  if (moisture > 0.55) {
     return 'forest';
   }
   
-  // Default to grassland
-  return 'grassland';
+  // Grassland in moderate conditions - second most common
+  if (moisture > 0.35 && temperature > 0.25) {
+    return 'grassland';
+  }
+  
+  // Default to tundra for cold, dry areas
+  return 'tundra';
 }
 
 /**
  * Generate a single tile at specific coordinates using deterministic noise
- * Enhanced for realistic continental patterns
+ * Enhanced for Dwarf Fortress-style continental patterns with strict ocean boundaries
  */
 function generateTileAt(x: number, y: number, seed: string): Tile {
   // Fixed dimensions for all maps
   const width = 1000;
   const height = 1000;
+  
+  // Calculate distance from edges for ocean boundary enforcement
+  // Require 5% of map size as ocean border (50 pixels for 1000x1000)
+  const oceanBorderWidth = Math.floor(Math.min(width, height) * 0.05); // 50 pixels
+  const distanceFromEdge = Math.min(x, y, width - 1 - x, height - 1 - y);
   
   // Create noise generators with seed-based deterministic values
   const elevationNoise = new DeterministicPerlinNoise(seed + '_elevation');
@@ -153,9 +163,9 @@ function generateTileAt(x: number, y: number, seed: string): Tile {
   // Enhanced continental generation - create 2 main continents usually
   const continentalNoise2 = new DeterministicPerlinNoise(seed + '_continental2');
   
-  // Scale factors optimized for 1000x1000 maps with realistic continents
-  const continentalScale = 0.0015; // Larger continental patterns for fewer, bigger continents
-  const continentalScale2 = 0.0018; // Slightly different scale for variation
+  // Scale factors optimized for 1000x1000 maps with DF-style continents
+  const continentalScale = 0.0012; // Larger continental patterns for fewer, bigger continents
+  const continentalScale2 = 0.0015; // Slightly different scale for variation
   const elevationScale = 0.008;
   const coastalScale = 0.025; // More coastal complexity
   const temperatureScale = 0.004;
@@ -163,57 +173,74 @@ function generateTileAt(x: number, y: number, seed: string): Tile {
 
   let elevation = 0;
   
-  // Create realistic continental patterns - aim for ~45% land coverage (1.5x Earth's ratio)
-  
-  // Primary continental structure - creates main landmass distribution
-  const continentalPattern1 = continentalNoise.octaveNoise(x * continentalScale, y * continentalScale, 3, 0.6);
-  
-  // Secondary continental structure - creates additional continents
-  const continentalPattern2 = continentalNoise2.octaveNoise(
-    (x + 500) * continentalScale2, // Offset to create different pattern
-    (y + 300) * continentalScale2, 
-    3, 0.5
-  );
-  
-  // Regional elevation variations
-  const regionalElevation = elevationNoise.octaveNoise(x * elevationScale, y * elevationScale, 6, 0.5);
-  
-  // Coastal complexity for realistic coastlines
-  const coastalComplexity = coastalNoise.octaveNoise(x * coastalScale, y * coastalScale, 4, 0.4);
-  
-  // Combine continental patterns - usually creates 2 major continents
-  // Use max to create separate continent clusters rather than blending
-  const mainContinental = Math.max(continentalPattern1 * 0.8, continentalPattern2 * 0.6);
-  
-  // Combine all elevation sources
-  let baseLand = mainContinental + regionalElevation * 0.2 + coastalComplexity * 0.12;
-  
-  // Normalize to 0-1 range
-  elevation = (baseLand + 1) / 2;
-  
-  // Apply power curve to create clearer land/ocean distinction and target ~45% land
-  // Adjust the curve to create the right land ratio
-  elevation = Math.pow(elevation, 1.1); // Less aggressive than before to increase land ratio
-  
-  // Threshold adjustment for ~45% land coverage
-  const landThreshold = 0.25; // Lower threshold = more land
-  
-  if (elevation > landThreshold) {
-    // Land areas - enhance elevation and add mountain ranges
-    elevation = landThreshold + (elevation - landThreshold) * 1.6;
+  // Hard ocean boundary enforcement - force ocean in border region
+  if (distanceFromEdge < oceanBorderWidth) {
+    // Force very low elevation to guarantee ocean at edges
+    elevation = 0.05 + (distanceFromEdge / oceanBorderWidth) * 0.2; // 0.05 to 0.25 range
+    elevation = Math.min(elevation, 0.3); // Ensure below land threshold
+  } else {
+    // Interior region - generate realistic continental patterns
+    // Target ~30% land coverage (DF-style)
     
-    // Add mountain ranges using ridge noise on higher terrain
-    const ridgeNoise = Math.abs(elevationNoise.octaveNoise(x * elevationScale * 2, y * elevationScale * 2, 3, 0.5));
-    if (elevation > 0.6) {
-      elevation += ridgeNoise * 0.35; // More prominent mountain ranges
+    // Create fade factor for smooth transition from ocean border
+    const fadeDistance = Math.min(30, oceanBorderWidth); // 30 pixel transition zone
+    const borderFade = distanceFromEdge < (oceanBorderWidth + fadeDistance) ?
+      Math.min(1, (distanceFromEdge - oceanBorderWidth) / fadeDistance) : 1;
+    
+    // Primary continental structure - creates main landmass distribution
+    const continentalPattern1 = continentalNoise.octaveNoise(x * continentalScale, y * continentalScale, 3, 0.6);
+    
+    // Secondary continental structure - creates additional continents
+    const continentalPattern2 = continentalNoise2.octaveNoise(
+      (x + 500) * continentalScale2, // Offset to create different pattern
+      (y + 300) * continentalScale2, 
+      3, 0.5
+    );
+    
+    // Regional elevation variations
+    const regionalElevation = elevationNoise.octaveNoise(x * elevationScale, y * elevationScale, 6, 0.5);
+    
+    // Coastal complexity for realistic coastlines
+    const coastalComplexity = coastalNoise.octaveNoise(x * coastalScale, y * coastalScale, 4, 0.4);
+    
+    // Combine continental patterns to create separate continent clusters
+    // Use different approach to ensure proper separation
+    const continent1 = Math.max(0, continentalPattern1);
+    const continent2 = Math.max(0, continentalPattern2);
+    const mainContinental = Math.max(continent1 * 0.75, continent2 * 0.6);
+    
+    // Combine all elevation sources
+    let baseLand = mainContinental + regionalElevation * 0.2 + coastalComplexity * 0.12;
+    
+    // Normalize to 0-1 range
+    elevation = (baseLand + 1) / 2;
+    
+    // Apply power curve to target ~30% land coverage (DF-style)
+    elevation = Math.pow(elevation, 1.1); // Less aggressive to allow more land
+    
+    // Threshold adjustment for ~30% land coverage
+    const landThreshold = 0.4; // Moderate threshold for balanced land/ocean
+    
+    if (elevation > landThreshold) {
+      // Land areas - enhance elevation and add mountain ranges
+      elevation = landThreshold + (elevation - landThreshold) * 1.3;
+      
+      // Add mountain ranges using ridge noise on higher terrain
+      const ridgeNoise = Math.abs(elevationNoise.octaveNoise(x * elevationScale * 2, y * elevationScale * 2, 3, 0.5));
+      if (elevation > 0.6) {
+        elevation += ridgeNoise * 0.25; // Mountain ranges on higher terrain
+      }
+      
+      // Ensure land is clearly above sea level
+      elevation = Math.max(elevation, 0.45);
+    } else {
+      // Ocean areas - keep clearly below land threshold with some seafloor variation
+      elevation = elevation * 0.8; // Keep ocean distinctly lower
+      elevation = Math.min(elevation, 0.35); // Ensure ocean stays below land threshold
     }
     
-    // Ensure land is clearly above sea level
-    elevation = Math.max(elevation, 0.35);
-  } else {
-    // Ocean areas - keep clearly below land threshold with some seafloor variation
-    elevation = elevation * 0.75; // Keep ocean distinctly lower
-    elevation = Math.min(elevation, 0.25); // Ensure ocean stays below land threshold
+    // Apply border fade to smooth transition from forced ocean border
+    elevation = elevation * borderFade + (1 - borderFade) * 0.2;
   }
   
   // Generate temperature based on latitude (distance from center) and elevation

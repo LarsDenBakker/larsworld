@@ -8,6 +8,31 @@ document.addEventListener('DOMContentLoaded', () => {
   const seedDisplay = document.getElementById('seed-display');
   const currentSeedSpan = document.getElementById('current-seed');
   const copySeedBtn = document.getElementById('copy-seed');
+  
+  // Legend toggle functionality
+  const legendToggle = document.getElementById('legend-toggle');
+  const legendContent = document.getElementById('legend-content');
+  
+  if (legendToggle && legendContent) {
+    legendToggle.addEventListener('click', () => {
+      const isExpanded = legendToggle.getAttribute('aria-expanded') === 'true';
+      legendToggle.setAttribute('aria-expanded', !isExpanded);
+      
+      if (isExpanded) {
+        legendContent.classList.remove('expanded');
+        legendContent.classList.add('collapsed');
+      } else {
+        legendContent.classList.remove('collapsed');
+        legendContent.classList.add('expanded');
+      }
+    });
+    
+    // Initialize mobile legend as collapsed
+    if (window.innerWidth <= 767) {
+      legendToggle.setAttribute('aria-expanded', 'false');
+      legendContent.classList.add('collapsed');
+    }
+  }
 
   // Generate random seed function
   function generateRandomSeed() {

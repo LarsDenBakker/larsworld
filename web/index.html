@@ -21,12 +21,17 @@
             
             <div class="controls-grid">
                 <div class="control-group">
-                    <label for="seed-input">Seed (optional):</label>
-                    <input type="text" id="seed-input" value="" placeholder="Leave empty for random">
+                    <label for="seed-input">World Name (optional):</label>
+                    <input type="text" id="seed-input" value="" placeholder="Leave empty for random name">
                 </div>
-                <div class="control-group">
-                    <label for="pagesize-input">Page Size:</label>
-                    <input type="number" id="pagesize-input" value="64" min="1" max="256">
+                <div class="control-group advanced-control">
+                    <label for="pagesize-input">World Detail Level:</label>
+                    <select id="pagesize-input" aria-label="Choose world detail level">
+                        <option value="32">Quick Preview</option>
+                        <option value="64" selected>Standard Quality</option>
+                        <option value="128">High Detail</option>
+                        <option value="256">Maximum Detail</option>
+                    </select>
                 </div>
             </div>
             
@@ -39,46 +44,51 @@
         <div id="map-container"></div>
         
         <aside id="legend">
-            <h3>Legend</h3>
-            <div class="legend-item">
-                <div class="legend-color ocean"></div>
-                <span>Ocean</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color shallow_water"></div>
-                <span>Shallow Water</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color beach"></div>
-                <span>Beach</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color desert"></div>
-                <span>Desert</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color grassland"></div>
-                <span>Grassland</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color forest"></div>
-                <span>Forest</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color tundra"></div>
-                <span>Tundra</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color mountain"></div>
-                <span>Mountain</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color snow"></div>
-                <span>Snow</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color swamp"></div>
-                <span>Swamp</span>
+            <button id="legend-toggle" class="legend-toggle" aria-expanded="true" aria-controls="legend-content">
+                <h3>Legend</h3>
+                <span class="legend-arrow">▼</span>
+            </button>
+            <div id="legend-content" class="legend-content">
+                <div class="legend-item">
+                    <div class="legend-color ocean"></div>
+                    <span>Ocean</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color shallow_water"></div>
+                    <span>Shallow Water</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color beach"></div>
+                    <span>Beach</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color desert"></div>
+                    <span>Desert</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color grassland"></div>
+                    <span>Grassland</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color forest"></div>
+                    <span>Forest</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color tundra"></div>
+                    <span>Tundra</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color mountain"></div>
+                    <span>Mountain</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color snow"></div>
+                    <span>Snow</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color swamp"></div>
+                    <span>Swamp</span>
+                </div>
             </div>
         </aside>
     </main>

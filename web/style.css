@@ -112,23 +112,41 @@ main {
   font-size: 0.9rem;
 }
 
-.control-group input {
+.control-group input,
+.control-group select {
   padding: 0.75rem 1rem;
   border: 2px solid #e5e7eb;
   border-radius: 8px;
   font-size: 1rem;
   transition: all 0.2s ease;
   background: white;
+  font-family: inherit;
 }
 
-.control-group input:focus {
+.control-group input:focus,
+.control-group select:focus {
   outline: none;
   border-color: #4f46e5;
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
 }
 
+.control-group select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: 2.5rem;
+}
+
 .control-group input[type="number"] {
   width: 100%;
+}
+
+/* Hide advanced controls on mobile by default */
+.advanced-control {
+  display: none;
 }
 
 /* Seed display */
@@ -188,6 +206,47 @@ main {
   padding: 1.5rem;
   box-shadow: 0 8px 32px rgba(0,0,0,0.1);
   border: 1px solid rgba(255,255,255,0.2);
+}
+
+.legend-toggle {
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  margin-bottom: 1rem;
+  font-family: inherit;
+}
+
+.legend-toggle h3 {
+  margin: 0;
+  color: #374151;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.legend-arrow {
+  font-size: 0.8rem;
+  color: #6b7280;
+  transition: transform 0.2s ease;
+}
+
+.legend-toggle[aria-expanded="false"] .legend-arrow {
+  transform: rotate(-90deg);
+}
+
+.legend-content {
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.legend-content.collapsed {
+  max-height: 0;
+  margin-bottom: 0;
 }
 
 #legend h3 {
@@ -334,17 +393,45 @@ main {
   
   #legend {
     grid-area: legend;
-    width: 200px;
+    width: 220px;
   }
   
   .controls-grid {
     grid-template-columns: 1fr 1fr;
+  }
+  
+  /* Show advanced controls on desktop */
+  .advanced-control {
+    display: flex;
+  }
+  
+  /* Desktop legend is always expanded */
+  .legend-toggle {
+    display: none;
+  }
+  
+  .legend-content {
+    display: block !important;
   }
 }
 
 @media (min-width: 1024px) {
   .controls-grid {
     grid-template-columns: 2fr 1fr;
+  }
+  
+  #legend {
+    width: 240px;
+  }
+  
+  /* Enhanced desktop experience */
+  .control-group label {
+    font-size: 1rem;
+  }
+  
+  .generate-btn {
+    font-size: 1.2rem;
+    padding: 1.2rem 2rem;
   }
 }
 
@@ -356,6 +443,10 @@ main {
   
   header {
     margin-bottom: 1.5rem;
+  }
+  
+  header h1 {
+    font-size: 2.5rem;
   }
   
   #map-controls {
@@ -370,6 +461,31 @@ main {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.5rem;
+  }
+  
+  /* Mobile-specific button styling */
+  .generate-btn {
+    padding: 1.2rem 2rem;
+    font-size: 1.2rem;
+    min-height: 56px; /* Minimum touch target size */
+  }
+  
+  /* Legend collapsed by default on mobile */
+  .legend-content {
+    max-height: 0;
+    overflow: hidden;
+    margin-bottom: 0;
+  }
+  
+  .legend-content.expanded {
+    max-height: 500px;
+    margin-bottom: 1rem;
+  }
+  
+  /* Simplified mobile layout */
+  .control-group input {
+    font-size: 16px; /* Prevents zoom on iOS */
+    min-height: 44px; /* Minimum touch target */
   }
 }
 
@@ -388,24 +504,34 @@ main {
   }
   
   .control-group label,
-  #legend h3,
+  .legend-toggle h3,
   .legend-item span {
     color: #e2e8f0;
   }
   
-  .control-group input {
+  .control-group input,
+  .control-group select {
     background: #2d3748;
     border-color: #4a5568;
     color: #e2e8f0;
   }
   
-  .control-group input:focus {
+  .control-group input:focus,
+  .control-group select:focus {
     border-color: #667eea;
+  }
+  
+  .control-group select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23e2e8f0' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
   }
   
   .seed-display {
     background: #2d3748;
     border-color: #4a5568;
     color: #e2e8f0;
+  }
+  
+  .legend-arrow {
+    color: #a0aec0;
   }
 }

@@ -158,112 +158,305 @@ function getBiome(temperature: number, moisture: number, elevation: number): Til
 }
 
 /**
- * Generates a realistic 2D map using noise-based elevation and climate simulation
- * All maps are guaranteed to have ocean boundaries on all edges
+ * Generate a continent shape using distance fields and noise distortion
+ * Creates realistic continental formations inspired by natural geography
+ */
+function generateContinent(width: number, height: number, noise: PerlinNoise): number[][] {
+  const continent: number[][] = [];
+  
+  // Position the continent slightly off-center for more natural look
+  // This simulates viewing a portion of a larger world, not the entire globe
+  const centerX = width * (0.4 + 0.2 * Math.random()); // 40-60% across
+  const centerY = height * (0.45 + 0.1 * Math.random()); // 45-55% down
+  
+  // Continent should cover a significant portion but ensure 20-40% ocean coverage
+  // For smaller maps, use more conservative continent sizing to ensure ocean coverage
+  const isSmallMap = width < 100 || height < 100;
+  const oceanTargetFactor = isSmallMap ? 0.85 : 0.9; // More conservative for small maps
+  
+  const continentRadiusX = width * (0.25 + 0.05 * Math.random()) * oceanTargetFactor;
+  const continentRadiusY = height * (0.22 + 0.04 * Math.random()) * oceanTargetFactor;
+  
+  for (let y = 0; y < height; y++) {
+    const row: number[] = [];
+    for (let x = 0; x < width; x++) {
+      // Calculate normalized distance from continent center
+      const dx = (x - centerX) / continentRadiusX;
+      const dy = (y - centerY) / continentRadiusY;
+      const distanceFromCenter = Math.sqrt(dx * dx + dy * dy);
+      
+      // Apply layered noise distortion for realistic coastlines
+      // Large-scale coastal features (bays, peninsulas)
+      const largeCoastalNoise = noise.octaveNoise(x * 0.008, y * 0.008, 3, 0.7);
+      // Medium-scale coastal complexity
+      const mediumCoastalNoise = noise.octaveNoise(x * 0.015, y * 0.015, 4, 0.5);
+      // Fine-scale coastal detail
+      const fineCoastalNoise = noise.octaveNoise(x * 0.03, y * 0.03, 3, 0.3);
+      
+      // Combine noise layers for multi-scale coastline realism
+      const noiseFactor = largeCoastalNoise * 0.25 + mediumCoastalNoise * 0.15 + fineCoastalNoise * 0.1;
+      const adjustedDistance = distanceFromCenter + noiseFactor;
+      
+      // Create continent shape with smooth falloff
+      let continentStrength = 0;
+      if (adjustedDistance < 1.2) { // Slightly larger threshold for more land
+        if (adjustedDistance < 1.0) {
+          // Core continent area - strong land presence
+          continentStrength = Math.pow(1 - adjustedDistance, 0.7);
+        } else {
+          // Transition zone - creates peninsulas and coastal complexity
+          const transitionFactor = 1.2 - adjustedDistance;
+          continentStrength = Math.pow(transitionFactor / 0.2, 1.5) * 0.6;
+        }
+      }
+      
+      row.push(continentStrength);
+    }
+    continent.push(row);
+  }
+  
+  return continent;
+}
+
+/**
+ * Generate islands scattered around the continent
+ * Creates archipelagos and island chains for variety and realism
+ */
+function generateIslands(width: number, height: number, continent: number[][], noise: PerlinNoise): number[][] {
+  const islands: number[][] = [];
+  
+  // Initialize with zeros
+  for (let y = 0; y < height; y++) {
+    islands.push(new Array(width).fill(0));
+  }
+  
+  // Generate several island clusters/archipelagos
+  const numIslandClusters = 4 + Math.floor(Math.random() * 3); // 4-6 clusters
+  
+  for (let cluster = 0; cluster < numIslandClusters; cluster++) {
+    // Find good location for islands - prefer areas with some distance from continent
+    let islandX, islandY, attempts = 0;
+    let bestScore = -1;
+    let bestX = 0, bestY = 0;
+    
+    // Try multiple locations and pick the best one
+    while (attempts < 30) {
+      const candidateX = Math.random() * width;
+      const candidateY = Math.random() * height;
+      const continentStrength = continent[Math.floor(candidateY)][Math.floor(candidateX)];
+      
+      // Prefer locations with moderate distance from continent (not too close, not too far)
+      let score = 0;
+      if (continentStrength < 0.1) {
+        // Good - in ocean but not too far from continent
+        score = 0.8;
+        
+        // Bonus for being near (but not on) continent edges
+        const nearbyLand = checkNearbyLand(continent, candidateX, candidateY, 80);
+        if (nearbyLand > 0 && nearbyLand < 0.3) {
+          score += 0.5; // Islands near continental shelves
+        }
+      } else if (continentStrength < 0.3) {
+        // Acceptable - coastal waters
+        score = 0.4;
+      }
+      
+      // Avoid map edges
+      const edgeDistance = Math.min(candidateX, candidateY, width - candidateX, height - candidateY);
+      if (edgeDistance < 50) {
+        score *= 0.3;
+      }
+      
+      if (score > bestScore) {
+        bestScore = score;
+        bestX = candidateX;
+        bestY = candidateY;
+      }
+      
+      attempts++;
+    }
+    
+    islandX = bestX;
+    islandY = bestY;
+    
+    // Create island cluster/archipelago
+    const clusterRadius = 60 + Math.random() * 80; // Variable cluster size
+    const numIslands = 2 + Math.floor(Math.random() * 4); // 2-5 islands per cluster
+    
+    for (let island = 0; island < numIslands; island++) {
+      // Position island within cluster - sometimes create island chains
+      let ix, iy;
+      if (island === 0) {
+        // First island at cluster center
+        ix = islandX;
+        iy = islandY;
+      } else {
+        // Subsequent islands can form chains or be scattered
+        if (Math.random() < 0.6) {
+          // Chain formation - extend from previous islands
+          const chainAngle = Math.random() * Math.PI * 2;
+          const chainDistance = 30 + Math.random() * 50;
+          ix = islandX + Math.cos(chainAngle) * chainDistance * island * 0.7;
+          iy = islandY + Math.sin(chainAngle) * chainDistance * island * 0.7;
+        } else {
+          // Scattered formation
+          const angle = Math.random() * Math.PI * 2;
+          const distance = Math.random() * clusterRadius;
+          ix = islandX + Math.cos(angle) * distance;
+          iy = islandY + Math.sin(angle) * distance;
+        }
+      }
+      
+      // Skip if island would be outside map or on existing land
+      if (ix < 0 || ix >= width || iy < 0 || iy >= height) continue;
+      if (continent[Math.floor(iy)][Math.floor(ix)] > 0.4) continue;
+      
+      // Island size varies based on position in cluster
+      const baseRadius = island === 0 ? 25 + Math.random() * 25 : 15 + Math.random() * 20;
+      const islandRadius = baseRadius;
+      
+      // Generate island shape with realistic coastlines
+      for (let y = Math.max(0, Math.floor(iy - islandRadius)); y < Math.min(height, Math.ceil(iy + islandRadius)); y++) {
+        for (let x = Math.max(0, Math.floor(ix - islandRadius)); x < Math.min(width, Math.ceil(ix + islandRadius)); x++) {
+          const dx = x - ix;
+          const dy = y - iy;
+          const distanceFromIslandCenter = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distanceFromIslandCenter < islandRadius) {
+            // Apply noise for irregular island shape
+            const islandShapeNoise = noise.octaveNoise(x * 0.04, y * 0.04, 3, 0.6);
+            const islandDetailNoise = noise.octaveNoise(x * 0.08, y * 0.08, 2, 0.3);
+            const totalNoise = islandShapeNoise * 8 + islandDetailNoise * 4;
+            
+            const adjustedDistance = distanceFromIslandCenter + totalNoise;
+            
+            if (adjustedDistance < islandRadius) {
+              const islandStrength = Math.pow(1 - adjustedDistance / islandRadius, 1.1);
+              // Islands are generally lower elevation than main continent
+              const maxStrength = 0.7 + Math.random() * 0.2;
+              islands[y][x] = Math.max(islands[y][x], islandStrength * maxStrength);
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  return islands;
+}
+
+/**
+ * Check for nearby land within a given radius
+ */
+function checkNearbyLand(continent: number[][], x: number, y: number, radius: number): number {
+  let landSum = 0;
+  let count = 0;
+  const intX = Math.floor(x);
+  const intY = Math.floor(y);
+  
+  for (let dy = -radius; dy <= radius; dy += 10) {
+    for (let dx = -radius; dx <= radius; dx += 10) {
+      const checkX = intX + dx;
+      const checkY = intY + dy;
+      
+      if (checkX >= 0 && checkX < continent[0].length && checkY >= 0 && checkY < continent.length) {
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance <= radius) {
+          landSum += continent[checkY][checkX];
+          count++;
+        }
+      }
+    }
+  }
+  
+  return count > 0 ? landSum / count : 0;
+}
+
+/**
+ * Generates a realistic 2D map featuring one large continent with scattered islands
+ * Ocean coverage is approximately 20-40% of the map
  */
 export function generateMap(width: number, height: number): Tile[][] {
   const map: Tile[][] = [];
   
   // Initialize noise generators with different seeds for variety
+  const continentNoise = new PerlinNoise(Math.random());
+  const islandNoise = new PerlinNoise(Math.random());
   const elevationNoise = new PerlinNoise(Math.random());
-  const continentalNoise = new PerlinNoise(Math.random());
-  const coastalNoise = new PerlinNoise(Math.random());
   const temperatureNoise = new PerlinNoise(Math.random());
   const moistureNoise = new PerlinNoise(Math.random());
   
-  // For large maps (500x500+), use earthlike continent generation
-  const isLargeMap = width >= 500 && height >= 500;
+  // Generate the main continent
+  const continent = generateContinent(width, height, continentNoise);
   
-  // Scale factors for noise sampling - adjusted for realistic continental features
-  const continentalScale = isLargeMap ? 0.002 : 0.01; // Very large continental patterns
-  const elevationScale = isLargeMap ? 0.008 : 0.05; // Regional terrain features
-  const coastalScale = isLargeMap ? 0.02 : 0.1; // Coastal complexity
-  const temperatureScale = isLargeMap ? 0.004 : 0.02; // Large climate zones
-  const moistureScale = isLargeMap ? 0.015 : 0.08; // Medium-sized moisture patterns
+  // Generate islands around the continent
+  const islands = generateIslands(width, height, continent, islandNoise);
   
-  // Calculate edge distances for ocean forcing
-  const oceanBorderWidth = Math.min(Math.max(3, Math.min(width, height) * 0.1), 10);
+  // Force ocean boundaries on all edges for map consistency
+  const oceanBorderWidth = Math.min(Math.max(3, Math.min(width, height) * 0.05), 8);
   
   for (let y = 0; y < height; y++) {
     const row: Tile[] = [];
     for (let x = 0; x < width; x++) {
-      // Calculate distance from nearest edge (0 = at edge, higher = toward center)
+      // Calculate distance from nearest edge
       const distanceFromEdge = Math.min(x, y, width - 1 - x, height - 1 - y);
       
-      // Force ocean at boundaries by modifying elevation based on distance from edge
-      const edgeFactor = Math.min(1, distanceFromEdge / oceanBorderWidth);
+      // Combine continent and island contributions
+      const landStrength = Math.max(continent[y][x], islands[y][x]);
       
-      let elevation = 0;
+      // Base elevation from land strength
+      let elevation = landStrength;
       
-      if (isLargeMap) {
-        // Create realistic continental patterns using layered noise
+      // Add detailed terrain elevation using noise
+      if (landStrength > 0.1) {
+        // Land areas - add terrain variation
+        const terrainElevation = elevationNoise.octaveNoise(x * 0.01, y * 0.01, 6, 0.5);
+        const terrainVariation = (terrainElevation + 1) / 2; // Normalize to 0-1
         
-        // Large-scale continental structure (major landmass placement)
-        const continentalPattern = continentalNoise.octaveNoise(x * continentalScale, y * continentalScale, 4, 0.6);
+        // Combine base land shape with terrain details
+        elevation = landStrength * 0.7 + terrainVariation * landStrength * 0.5;
         
-        // Regional elevation variations
-        const regionalElevation = elevationNoise.octaveNoise(x * elevationScale, y * elevationScale, 6, 0.5);
-        
-        // Coastal complexity and irregular shapes
-        const coastalComplexity = coastalNoise.octaveNoise(x * coastalScale, y * coastalScale, 4, 0.4);
-        
-        // Combine noise layers for realistic terrain
-        // Continental pattern provides the main land/ocean distribution
-        let baseLand = continentalPattern * 0.7 + regionalElevation * 0.3;
-        
-        // Add coastal irregularity for realistic coastline shapes
-        baseLand += coastalComplexity * 0.15;
-        
-        // Normalize and adjust for earthlike land/ocean ratio (approximately 30% land)
-        elevation = (baseLand + 1) / 2; // Normalize to 0-1
-        
-        // Create more realistic elevation distribution
-        // Bias toward ocean (sea level) but allow for significant landmasses
-        elevation = Math.pow(elevation, 1.2); // Slightly favor lower elevations for more ocean
-        
-        // Enhance continental structure by strengthening land areas
-        if (elevation > 0.35) {
-          // Land areas - add more elevation variation
-          elevation = 0.35 + (elevation - 0.35) * 1.4;
-          
-          // Add mountain ranges using ridge noise
-          const ridgeNoise = Math.abs(elevationNoise.octaveNoise(x * elevationScale * 2, y * elevationScale * 2, 3, 0.5));
-          if (elevation > 0.6) {
-            elevation += ridgeNoise * 0.3; // Mountain ranges on higher terrain
-          }
-        } else {
-          // Ocean areas - keep lower but add some seafloor variation
-          elevation = elevation * 0.8;
+        // Add mountain ranges in the interior of large landmasses
+        if (landStrength > 0.6) {
+          const ridgeNoise = Math.abs(elevationNoise.octaveNoise(x * 0.02, y * 0.02, 4, 0.4));
+          elevation += ridgeNoise * landStrength * 0.4;
         }
+        
+        // Ensure minimum land elevation
+        elevation = Math.max(elevation, 0.25 + landStrength * 0.1);
       } else {
-        // Original logic for smaller maps
-        elevation = elevationNoise.octaveNoise(x * elevationScale, y * elevationScale, 5, 0.5);
-        elevation = (elevation + 1) / 2; // Normalize to 0-1
-        elevation = Math.pow(elevation, 0.8);
-        if (elevation < 0.4) {
-          elevation = elevation * 0.7;
-        }
+        // Ocean areas - add seafloor variation
+        const seafloorVariation = elevationNoise.octaveNoise(x * 0.005, y * 0.005, 3, 0.3);
+        elevation = 0.1 + Math.max(0, seafloorVariation * 0.1);
       }
       
-      // Apply ocean boundary forcing - ensure all edges are ocean
+      // Force ocean boundaries for map edges
       if (distanceFromEdge < oceanBorderWidth) {
-        // Force very low elevation near edges to guarantee ocean
-        const forcedOceanElevation = 0.05; // Well below ocean threshold of 0.25
-        elevation = forcedOceanElevation + (elevation * edgeFactor * 0.2); // Smooth transition
-        elevation = Math.min(elevation, 0.2); // Cap to ensure ocean biome
+        const edgeFactor = distanceFromEdge / oceanBorderWidth;
+        const forcedOceanElevation = 0.05;
+        elevation = Math.min(elevation, forcedOceanElevation + elevation * edgeFactor * 0.3);
       }
       
-      // Generate temperature based on latitude (distance from center) and elevation
+      // Clamp elevation to valid range
+      elevation = Math.max(0, Math.min(1, elevation));
+      
+      // Generate temperature based on latitude and elevation
       const latitudeFactor = Math.abs((y / height) - 0.5) * 2; // 0 at equator, 1 at poles
       let temperature = 1 - latitudeFactor; // Hot at equator, cold at poles
-      temperature += temperatureNoise.octaveNoise(x * temperatureScale, y * temperatureScale, 2, 0.3) * 0.3;
-      temperature -= elevation * 0.4; // Higher elevation = colder
-      temperature = Math.max(0, Math.min(1, temperature)); // Clamp to 0-1
+      temperature += temperatureNoise.octaveNoise(x * 0.008, y * 0.008, 3, 0.3) * 0.3;
+      temperature -= elevation * 0.5; // Higher elevation = colder
+      temperature = Math.max(0, Math.min(1, temperature));
       
       // Generate moisture patterns
-      let moisture = moistureNoise.octaveNoise(x * moistureScale, y * moistureScale, 3, 0.4);
+      let moisture = moistureNoise.octaveNoise(x * 0.012, y * 0.012, 4, 0.4);
       moisture = (moisture + 1) / 2; // Normalize to 0-1
-      moisture = Math.max(0, Math.min(1, moisture)); // Clamp to 0-1
+      
+      // Add coastal moisture effects
+      if (landStrength > 0.1 && landStrength < 0.7) {
+        moisture += 0.2; // Coastal areas are more humid
+      }
+      
+      moisture = Math.max(0, Math.min(1, moisture));
       
       // Determine biome based on climate and elevation
       const biome = getBiome(temperature, moisture, elevation);

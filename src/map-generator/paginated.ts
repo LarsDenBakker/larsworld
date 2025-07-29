@@ -141,108 +141,153 @@ function getBiome(temperature: number, moisture: number, elevation: number): Bio
 
 /**
  * Generate a single tile at specific coordinates using deterministic noise
- * Enhanced for Dwarf Fortress-style continental patterns with strict ocean boundaries
+ * Enhanced for Dwarf Fortress-style continental patterns with realistic geography
  */
 function generateTileAt(x: number, y: number, seed: string): Tile {
   // Fixed dimensions for all maps
   const width = 1000;
   const height = 1000;
   
-  // Calculate distance from edges for ocean boundary enforcement
-  // Require 5% of map size as ocean border (50 pixels for 1000x1000)
-  const oceanBorderWidth = Math.floor(Math.min(width, height) * 0.05); // 50 pixels
-  const distanceFromEdge = Math.min(x, y, width - 1 - x, height - 1 - y);
-  
   // Create noise generators with seed-based deterministic values
   const elevationNoise = new DeterministicPerlinNoise(seed + '_elevation');
   const continentalNoise = new DeterministicPerlinNoise(seed + '_continental');
+  const continentalNoise2 = new DeterministicPerlinNoise(seed + '_continental2');
+  const continentalNoise3 = new DeterministicPerlinNoise(seed + '_continental3');
   const coastalNoise = new DeterministicPerlinNoise(seed + '_coastal');
   const temperatureNoise = new DeterministicPerlinNoise(seed + '_temperature');
   const moistureNoise = new DeterministicPerlinNoise(seed + '_moisture');
   
-  // Enhanced continental generation - create 2 main continents usually
-  const continentalNoise2 = new DeterministicPerlinNoise(seed + '_continental2');
-  
-  // Scale factors optimized for 1000x1000 maps with DF-style continents
-  const continentalScale = 0.0012; // Larger continental patterns for fewer, bigger continents
-  const continentalScale2 = 0.0015; // Slightly different scale for variation
-  const elevationScale = 0.008;
-  const coastalScale = 0.025; // More coastal complexity
+  // Scale factors optimized for 1000x1000 maps with realistic continental patterns
+  const continentalScale = 0.001;    // Large scale continental patterns
+  const elevationScale = 0.008;      // Regional elevation detail
+  const coastalScale = 0.025;        // Coastal complexity
   const temperatureScale = 0.004;
   const moistureScale = 0.015;
-
-  let elevation = 0;
   
-  // Hard ocean boundary enforcement - force ocean in border region
+  // Ocean boundary enforcement - apply early to prevent continental cores near edges
+  const distanceFromEdge = Math.min(x, y, width - 1 - x, height - 1 - y);
+  const oceanBorderWidth = Math.floor(Math.min(width, height) * 0.05); // 50 pixels for 1000x1000
+  
+  // Hard boundary enforcement for edges
   if (distanceFromEdge < oceanBorderWidth) {
-    // Force very low elevation to guarantee ocean at edges
-    elevation = 0.05 + (distanceFromEdge / oceanBorderWidth) * 0.2; // 0.05 to 0.25 range
-    elevation = Math.min(elevation, 0.3); // Ensure below land threshold
-  } else {
-    // Interior region - generate realistic continental patterns
-    // Target ~30% land coverage (DF-style)
-    
-    // Create fade factor for smooth transition from ocean border
-    const fadeDistance = Math.min(30, oceanBorderWidth); // 30 pixel transition zone
-    const borderFade = distanceFromEdge < (oceanBorderWidth + fadeDistance) ?
-      Math.min(1, (distanceFromEdge - oceanBorderWidth) / fadeDistance) : 1;
-    
-    // Primary continental structure - creates main landmass distribution
-    const continentalPattern1 = continentalNoise.octaveNoise(x * continentalScale, y * continentalScale, 3, 0.6);
-    
-    // Secondary continental structure - creates additional continents
-    const continentalPattern2 = continentalNoise2.octaveNoise(
-      (x + 500) * continentalScale2, // Offset to create different pattern
-      (y + 300) * continentalScale2, 
-      3, 0.5
-    );
-    
-    // Regional elevation variations
-    const regionalElevation = elevationNoise.octaveNoise(x * elevationScale, y * elevationScale, 6, 0.5);
-    
-    // Coastal complexity for realistic coastlines
-    const coastalComplexity = coastalNoise.octaveNoise(x * coastalScale, y * coastalScale, 4, 0.4);
-    
-    // Combine continental patterns to create separate continent clusters
-    // Use different approach to ensure proper separation
-    const continent1 = Math.max(0, continentalPattern1);
-    const continent2 = Math.max(0, continentalPattern2);
-    const mainContinental = Math.max(continent1 * 0.75, continent2 * 0.6);
-    
-    // Combine all elevation sources
-    let baseLand = mainContinental + regionalElevation * 0.2 + coastalComplexity * 0.12;
-    
-    // Normalize to 0-1 range
-    elevation = (baseLand + 1) / 2;
-    
-    // Apply power curve to target ~30% land coverage (DF-style)
-    elevation = Math.pow(elevation, 1.1); // Less aggressive to allow more land
-    
-    // Threshold adjustment for ~30% land coverage
-    const landThreshold = 0.4; // Moderate threshold for balanced land/ocean
-    
-    if (elevation > landThreshold) {
-      // Land areas - enhance elevation and add mountain ranges
-      elevation = landThreshold + (elevation - landThreshold) * 1.3;
-      
-      // Add mountain ranges using ridge noise on higher terrain
-      const ridgeNoise = Math.abs(elevationNoise.octaveNoise(x * elevationScale * 2, y * elevationScale * 2, 3, 0.5));
-      if (elevation > 0.6) {
-        elevation += ridgeNoise * 0.25; // Mountain ranges on higher terrain
-      }
-      
-      // Ensure land is clearly above sea level
-      elevation = Math.max(elevation, 0.45);
-    } else {
-      // Ocean areas - keep clearly below land threshold with some seafloor variation
-      elevation = elevation * 0.8; // Keep ocean distinctly lower
-      elevation = Math.min(elevation, 0.35); // Ensure ocean stays below land threshold
-    }
-    
-    // Apply border fade to smooth transition from forced ocean border
-    elevation = elevation * borderFade + (1 - borderFade) * 0.2;
+    // Force ocean at edges - no exceptions
+    const elevation = 0.1 + (distanceFromEdge / oceanBorderWidth) * 0.15; // 0.1 to 0.25 range
+    return generateClimateAndBiome(x, y, elevation, seed, width, height, temperatureNoise, moistureNoise, temperatureScale, moistureScale);
   }
   
+  // Normalize coordinates to -1 to 1 range for continental distribution
+  const nx = (x / width) * 2 - 1;
+  const ny = (y / height) * 2 - 1;
+  
+  // Calculate fade factor for areas near but not at edges
+  const fadeDistance = oceanBorderWidth * 1.5; // 75 pixel fade zone
+  let borderFade = 1;
+  if (distanceFromEdge < oceanBorderWidth + fadeDistance) {
+    borderFade = Math.min(1, (distanceFromEdge - oceanBorderWidth) / fadeDistance);
+    borderFade = Math.pow(borderFade, 1.5); // Stronger fade curve
+  }
+  
+  // Create multiple continental cores with strong separation
+  // Continental core 1 - Northwest region (primary)
+  const core1CenterX = -0.5;
+  const core1CenterY = -0.4;
+  const core1Distance = Math.sqrt(Math.pow(nx - core1CenterX, 2) + Math.pow(ny - core1CenterY, 2));
+  const core1Radius = 0.4; // Smaller, more distinct continents
+  const core1Strength = Math.max(0, 1.5 - (core1Distance / core1Radius) * 2.5); // Steeper falloff
+  const core1Noise = continentalNoise.octaveNoise(x * continentalScale, y * continentalScale, 4, 0.6);
+  const continent1 = Math.max(0, core1Strength * (0.8 + core1Noise * 0.3)) * borderFade;
+  
+  // Continental core 2 - Southeast region (secondary)
+  const core2CenterX = 0.4;
+  const core2CenterY = 0.5;
+  const core2Distance = Math.sqrt(Math.pow(nx - core2CenterX, 2) + Math.pow(ny - core2CenterY, 2));
+  const core2Radius = 0.35; // Smaller continent  
+  const core2Strength = Math.max(0, 1.3 - (core2Distance / core2Radius) * 2.8); // Steeper falloff
+  const core2Noise = continentalNoise2.octaveNoise((x + 400) * continentalScale, (y + 300) * continentalScale, 4, 0.5);
+  const continent2 = Math.max(0, core2Strength * (0.7 + core2Noise * 0.3)) * borderFade;
+  
+  // Continental core 3 - Northeast region (smaller, occasional)
+  const core3CenterX = 0.2;
+  const core3CenterY = -0.3;
+  const core3Distance = Math.sqrt(Math.pow(nx - core3CenterX, 2) + Math.pow(ny - core3CenterY, 2));
+  const core3Radius = 0.25; // Small continent
+  const core3Strength = Math.max(0, 1.0 - (core3Distance / core3Radius) * 3.0); // Steeper falloff
+  const core3Noise = continentalNoise3.octaveNoise((x + 700) * continentalScale, (y + 100) * continentalScale, 3, 0.4);
+  // Make this continent seed-dependent - some seeds won't have it
+  const core3Seed = Math.abs(Math.sin(hashSeed(seed + '_core3') * 0.001)) > 0.5 ? 1 : 0;
+  const continent3 = Math.max(0, core3Strength * core3Seed * (0.6 + core3Noise * 0.25)) * borderFade;
+  
+  // Continental separator - creates ocean trenches between continents
+  const separatorNoise = continentalNoise.octaveNoise(x * continentalScale * 0.5, y * continentalScale * 0.5, 2, 0.4);
+  
+  // Create strong ocean channels in key separation areas
+  let oceanSeparator = 0;
+  
+  // Vertical separator between NW and NE continents (around x = 0)
+  const verticalSepDistance = Math.abs(nx - 0.0) + Math.abs(ny - 0.0); // Distance from center
+  if (verticalSepDistance < 0.8) {
+    oceanSeparator = Math.max(oceanSeparator, 0.4 - verticalSepDistance * 0.3);
+  }
+  
+  // Diagonal separator between NW and SE continents
+  const diagonalSepDistance = Math.abs((nx + ny) * 0.7); // Diagonal line
+  if (diagonalSepDistance < 0.6) {
+    oceanSeparator = Math.max(oceanSeparator, 0.3 - diagonalSepDistance * 0.4);
+  }
+  
+  // Use MAXIMUM instead of additive to ensure true separation
+  // This ensures continents don't blend into each other
+  let continentalMass = Math.max(continent1, continent2, continent3);
+  
+  // Apply ocean separator to create gaps between continents
+  continentalMass = Math.max(0, continentalMass - oceanSeparator * 1.5);
+  
+  // Add some variation but keep it very subtle to maintain separation
+  const continentalVariation = continentalNoise.octaveNoise(x * continentalScale * 3, y * continentalScale * 3, 2, 0.2);
+  continentalMass += continentalVariation * 0.05; // Very reduced influence
+  
+  // Regional elevation variations for terrain complexity
+  const regionalElevation = elevationNoise.octaveNoise(x * elevationScale, y * elevationScale, 6, 0.5);
+  
+  // Coastal complexity for natural coastlines
+  const coastalComplexity = coastalNoise.octaveNoise(x * coastalScale, y * coastalScale, 4, 0.4);
+  
+  // Combine elevation sources
+  let elevation = continentalMass + regionalElevation * 0.15 + coastalComplexity * 0.1;
+  
+  // Normalize elevation to reasonable range
+  elevation = Math.max(0, Math.min(1.5, elevation));
+  
+  // Apply more gradual land/ocean threshold for natural coastlines
+  const baseSeaLevel = 0.35;
+  
+  if (elevation > baseSeaLevel) {
+    // Land areas - enhance and add mountain systems
+    elevation = baseSeaLevel + (elevation - baseSeaLevel) * 1.4;
+    
+    // Add mountain ranges on higher continental areas
+    if (elevation > 0.65) {
+      const mountainNoise = Math.abs(elevationNoise.octaveNoise(x * elevationScale * 2, y * elevationScale * 2, 3, 0.5));
+      elevation += mountainNoise * 0.3;
+    }
+    
+    // Ensure land stays above sea level
+    elevation = Math.max(elevation, 0.42);
+  } else {
+    // Ocean areas - create varied seafloor
+    elevation = elevation * 0.9;
+  }
+  
+  // Final normalization
+  elevation = Math.max(0, Math.min(1, elevation));
+  
+  return generateClimateAndBiome(x, y, elevation, seed, width, height, temperatureNoise, moistureNoise, temperatureScale, moistureScale);
+}
+
+/**
+ * Generate climate and biome for a tile given elevation and position
+ */
+function generateClimateAndBiome(x: number, y: number, elevation: number, seed: string, width: number, height: number, temperatureNoise: DeterministicPerlinNoise, moistureNoise: DeterministicPerlinNoise, temperatureScale: number, moistureScale: number): Tile {
   // Generate temperature based on latitude (distance from center) and elevation
   const latitudeFactor = Math.abs((y / height) - 0.5) * 2; // 0 at equator, 1 at poles
   let temperature = 1 - latitudeFactor; // Hot at equator, cold at poles

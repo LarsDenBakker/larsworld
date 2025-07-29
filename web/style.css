@@ -95,7 +95,7 @@ main {
 /* Controls grid */
 .controls-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1rem;
   margin-bottom: 1rem;
 }
@@ -156,35 +156,6 @@ main {
 
 .copy-btn:hover {
   background: #e5e7eb;
-}
-
-/* Preset buttons */
-.preset-buttons {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
-}
-
-.preset-btn {
-  background: #f3f4f6;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  padding: 0.5rem 1rem;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  flex: 1;
-  min-width: 120px;
-}
-
-.preset-btn:hover {
-  background: #e5e7eb;
-  border-color: #9ca3af;
-}
-
-.preset-btn:active {
-  background: #d1d5db;
 }
 
 /* Map container */
@@ -289,14 +260,6 @@ main {
   background-color: #059669;
 }
 
-.legend-color.river {
-  background-color: #0891b2;
-}
-
-.legend-color.lake {
-  background-color: #0e7490;
-}
-
 /* Progress indicator styling */
 .progress-container {
   background: #f8fafc;
@@ -381,7 +344,7 @@ main {
 
 @media (min-width: 1024px) {
   .controls-grid {
-    grid-template-columns: 2fr 1fr 1fr 1fr;
+    grid-template-columns: 2fr 1fr;
   }
 }
 
@@ -403,22 +366,10 @@ main {
     grid-template-columns: 1fr;
   }
   
-  .preset-buttons {
-    flex-direction: column;
-  }
-  
-  .preset-btn {
-    min-width: auto;
-  }
-  
   .seed-display {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.5rem;
-  }
-  
-  #legend {
-    order: -1; /* Show legend above map on mobile */
   }
 }
 
@@ -456,16 +407,5 @@ main {
     background: #2d3748;
     border-color: #4a5568;
     color: #e2e8f0;
-  }
-  
-  .preset-btn {
-    background: #2d3748;
-    border-color: #4a5568;
-    color: #e2e8f0;
-  }
-  
-  .preset-btn:hover {
-    background: #4a5568;
-    border-color: #667eea;
   }
 }

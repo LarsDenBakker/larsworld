@@ -13,9 +13,7 @@ export const BIOME_TYPES = [
   'tundra',
   'mountain',
   'snow',
-  'swamp',
-  'river',
-  'lake'
+  'swamp'
 ] as const;
 
 export type BiomeType = typeof BIOME_TYPES[number];
@@ -48,8 +46,6 @@ export interface MapPageRequest {
   page: number;
   pageSize: number;
   seed: string;
-  width?: number;
-  height?: number;
 }
 
 // API response for a single page of map data

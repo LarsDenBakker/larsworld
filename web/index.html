@@ -22,26 +22,12 @@
             <div class="controls-grid">
                 <div class="control-group">
                     <label for="seed-input">Seed (optional):</label>
-                    <input type="text" id="seed-input" value="" placeholder="Leave empty for random" title="Enter a custom seed for reproducible worlds">
-                </div>
-                <div class="control-group">
-                    <label for="width-input">Map Width:</label>
-                    <input type="number" id="width-input" value="1000" min="100" max="2000" step="50" title="Width in tiles (100-2000)">
-                </div>
-                <div class="control-group">
-                    <label for="height-input">Map Height:</label>
-                    <input type="number" id="height-input" value="1000" min="100" max="2000" step="50" title="Height in tiles (100-2000)">
+                    <input type="text" id="seed-input" value="" placeholder="Leave empty for random">
                 </div>
                 <div class="control-group">
                     <label for="pagesize-input">Page Size:</label>
-                    <input type="number" id="pagesize-input" value="64" min="1" max="256" title="Rows per API request (affects generation speed)">
+                    <input type="number" id="pagesize-input" value="64" min="1" max="256">
                 </div>
-            </div>
-            
-            <div class="preset-buttons">
-                <button type="button" class="preset-btn" data-width="500" data-height="500">Small (500×500)</button>
-                <button type="button" class="preset-btn" data-width="1000" data-height="1000">Medium (1000×1000)</button>
-                <button type="button" class="preset-btn" data-width="1500" data-height="1500">Large (1500×1500)</button>
             </div>
             
             <div id="seed-display" class="seed-display" style="display: none;">
@@ -93,14 +79,6 @@
             <div class="legend-item">
                 <div class="legend-color swamp"></div>
                 <span>Swamp</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color river"></div>
-                <span>River</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color lake"></div>
-                <span>Lake</span>
             </div>
         </aside>
     </main>

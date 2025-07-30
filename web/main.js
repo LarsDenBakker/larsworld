@@ -122,8 +122,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Biome color palette with earth-like realistic colors
         const BIOME_COLORS = {
-          deep_ocean: '#19376d',      // Deep blue
-          shallow_ocean: '#4169e1',   // Royal blue
+          deep_ocean: '#4169e1',      // Royal blue (was shallow ocean)
+          shallow_ocean: '#87ceeb',   // Sky blue (lighter)
           desert: '#eecbad',          // Sandy beige
           tundra: '#b0c4de',          // Light steel blue
           arctic: '#f8f8ff',          // Ghost white

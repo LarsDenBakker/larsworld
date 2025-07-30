@@ -120,20 +120,33 @@ document.addEventListener('DOMContentLoaded', () => {
           land: '#22c55e'    // Green for land
         };
 
-        // Create progress indicator with modern styling
+        // Create enhanced progress indicator with detailed stages
         const progressContainer = document.createElement('div');
         progressContainer.className = 'progress-container';
         progressContainer.innerHTML = `
-          <div class="progress-title">Generating World...</div>
-          <div class="progress-bar-container">
-            <div id="progress-bar"></div>
+          <div class="progress-header">
+            <div class="progress-title">
+              <span class="progress-icon">🌍</span>
+              <span>Generating World...</span>
+            </div>
+            <div class="progress-stage" id="progress-stage">Initializing</div>
           </div>
-          <div id="progress-text">Initializing...</div>
+          <div class="progress-bar-container">
+            <div id="progress-bar" class="progress-bar-fill"></div>
+            <div class="progress-percentage" id="progress-percentage">0%</div>
+          </div>
+          <div class="progress-details">
+            <div id="progress-text" class="progress-status">Preparing world generation...</div>
+            <div id="progress-eta" class="progress-eta"></div>
+          </div>
         `;
         mapContainer.appendChild(progressContainer);
 
         const progressBar = document.getElementById('progress-bar');
         const progressText = document.getElementById('progress-text');
+        const progressStage = document.getElementById('progress-stage');
+        const progressPercentage = document.getElementById('progress-percentage');
+        const progressEta = document.getElementById('progress-eta');
 
         // Calculate display scale
         const maxDisplaySize = Math.min(window.innerWidth - 64, window.innerHeight - 200, 800);
@@ -151,13 +164,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const ctx = canvas.getContext('2d');
 
         // Fetch first page to determine total pages but also start parallel fetching
-        progressText.textContent = 'Starting parallel world generation...';
+        progressStage.textContent = 'Initializing';
+        progressText.textContent = 'Starting world generation...';
         
         // Start with 5 concurrent requests including the first page
         const initialConcurrency = 5;
         const initialPages = Array.from({length: initialConcurrency}, (_, i) => i);
         
-        progressText.textContent = `Fetching first ${initialConcurrency} pages in parallel...`;
+        progressStage.textContent = 'Loading';
+        progressText.textContent = `Starting parallel generation of ${initialConcurrency} sections...`;
+        
+        // Track timing for ETA calculation
+        const startTime = Date.now();
         
         // Create parallel fetch promises for initial pages
         const initialPromises = initialPages.map(async (page) => {
@@ -219,10 +237,43 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         let pagesComplete = initialResults.length;
+        
         const updateProgress = () => {
           const progress = (pagesComplete / totalPages) * 100;
+          const roundedProgress = Math.round(progress);
+          
+          // Animate progress bar
           progressBar.style.width = `${progress}%`;
-          progressText.textContent = `Page ${pagesComplete} of ${totalPages} (${Math.round(progress)}%)`;
+          progressPercentage.textContent = `${roundedProgress}%`;
+          
+          // Update stage based on progress
+          if (progress < 10) {
+            progressStage.textContent = 'Initializing';
+          } else if (progress < 30) {
+            progressStage.textContent = 'Generating Terrain';
+          } else if (progress < 70) {
+            progressStage.textContent = 'Loading World Data';
+          } else if (progress < 95) {
+            progressStage.textContent = 'Rendering Map';
+          } else {
+            progressStage.textContent = 'Finalizing';
+          }
+          
+          // Calculate and display ETA
+          const elapsed = Date.now() - startTime;
+          if (pagesComplete > 1 && progress > 5 && progress < 95) {
+            const avgTimePerPage = elapsed / pagesComplete;
+            const remainingPages = totalPages - pagesComplete;
+            const etaMs = remainingPages * avgTimePerPage;
+            const etaSeconds = Math.ceil(etaMs / 1000);
+            
+            if (etaSeconds > 0) {
+              progressEta.textContent = `~${etaSeconds}s remaining`;
+            }
+          }
+          
+          // Update detailed progress text
+          progressText.textContent = `Section ${pagesComplete} of ${totalPages} completed`;
         };
 
         updateProgress();
@@ -236,7 +287,10 @@ document.addEventListener('DOMContentLoaded', () => {
           // Process remaining pages in parallel batches
           for (let i = 0; i < remainingPages.length; i += concurrencyLimit) {
             const batch = remainingPages.slice(i, i + concurrencyLimit);
-            progressText.textContent = `Fetching pages ${batch[0] + 1}-${batch[batch.length - 1] + 1}...`;
+            const batchStart = batch[0] + 1;
+            const batchEnd = batch[batch.length - 1] + 1;
+            
+            progressText.textContent = `Loading sections ${batchStart}-${batchEnd}...`;
             
             // Create parallel fetch promises for this batch
             const batchPromises = batch.map(async (page) => {
@@ -259,15 +313,15 @@ document.addEventListener('DOMContentLoaded', () => {
               // Sort by page number to ensure correct rendering order
               batchResults.sort((a, b) => a.page - b.page);
               
-              // Render pages in order
+              // Render pages in order with smooth progress updates
               for (const { pageData } of batchResults) {
                 renderPage(pageData);
                 pagesComplete++;
                 updateProgress();
+                
+                // Small delay for smooth visual feedback
+                await new Promise(resolve => setTimeout(resolve, 5));
               }
-
-              // Small delay to allow UI updates between batches
-              await new Promise(resolve => setTimeout(resolve, 10));
 
             } catch (error) {
               console.error(`Failed to fetch batch starting at page ${batch[0]}:`, error);
@@ -276,8 +330,18 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         }
 
-        // Remove progress indicator
-        progressContainer.remove();
+        // Final progress update
+        progressStage.textContent = 'Complete';
+        progressText.textContent = 'World generation completed!';
+        progressEta.textContent = '';
+        
+        // Animate completion
+        setTimeout(() => {
+          progressContainer.classList.add('completed');
+          setTimeout(() => {
+            progressContainer.remove();
+          }, 1000);
+        }, 500);
 
         // Add completion info with modern styling
         const infoContainer = document.createElement('div');

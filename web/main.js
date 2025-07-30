@@ -113,12 +113,48 @@ document.addEventListener('DOMContentLoaded', () => {
         const height = 1000;
         // Tile types as per API specification (only land and ocean)
         const TILE_TYPES = ['ocean', 'land'];
+        
+        // Biome types for enhanced visualization
+        const BIOME_TYPES = [
+          'deep_ocean', 'shallow_ocean', 'desert', 'tundra', 'arctic', 'swamp',
+          'grassland', 'forest', 'taiga', 'savanna', 'tropical_forest', 'alpine'
+        ];
 
-        // Color mapping for tile types - using earth-like realistic colors
-        const colors = {
-          ocean: '#1e40af',  // Deep blue for ocean
-          land: '#22c55e'    // Green for land
+        // Biome color palette with earth-like realistic colors
+        const BIOME_COLORS = {
+          deep_ocean: '#4169e1',      // Royal blue (was shallow ocean)
+          shallow_ocean: '#6496e6',   // Medium blue (darker than before, lighter than deep)
+          desert: '#eecbad',          // Sandy beige
+          tundra: '#b0c4de',          // Light steel blue
+          arctic: '#f8f8ff',          // Ghost white
+          swamp: '#556b2f',           // Dark olive green
+          grassland: '#7cfc00',       // Lawn green
+          forest: '#228b22',          // Forest green
+          taiga: '#487648',           // Dark sea green
+          savanna: '#bdb76b',         // Dark khaki
+          tropical_forest: '#006400', // Dark green
+          alpine: '#a9a9a9'           // Dark gray
         };
+        
+        /**
+         * Apply elevation-based darkening to a color
+         */
+        function applyElevationShading(hexColor, elevation) {
+          // Convert hex to RGB
+          const r = parseInt(hexColor.slice(1, 3), 16);
+          const g = parseInt(hexColor.slice(3, 5), 16);
+          const b = parseInt(hexColor.slice(5, 7), 16);
+          
+          // Higher elevation = darker color (simulate shadows/altitude effects)
+          const darkeningFactor = 1 - (elevation * 0.4); // Reduce up to 40% brightness at max elevation
+          
+          const shadedR = Math.floor(r * darkeningFactor);
+          const shadedG = Math.floor(g * darkeningFactor);
+          const shadedB = Math.floor(b * darkeningFactor);
+          
+          // Convert back to hex
+          return '#' + [shadedR, shadedG, shadedB].map(x => x.toString(16).padStart(2, '0')).join('');
+        }
 
         // Create enhanced progress indicator with detailed stages
         const progressContainer = document.createElement('div');
@@ -206,13 +242,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Convert compact tile to full tile format
         function compactToTile(compact, x, y) {
+          const elevation = compact.e / 255;
+          const temperature = compact.tmp / 255;
+          const moisture = compact.m / 255;
+          const biome = BIOME_TYPES[compact.b];
+          
           return {
             type: TILE_TYPES[compact.t], // Use 't' field for tile type index
             x,
             y,
-            elevation: compact.e / 255,
-            temperature: compact.tmp / 255, // Use 'tmp' field for temperature  
-            moisture: compact.m / 255
+            elevation,
+            temperature,
+            moisture,
+            biome
           };
         }
 
@@ -223,7 +265,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const y = startY + rowIndex;
             row.forEach((compactTile, x) => {
               const tile = compactToTile(compactTile, x, y);
-              const color = colors[tile.type] || '#888888';
+              
+              // Use biome color with elevation shading
+              const baseColor = BIOME_COLORS[tile.biome] || '#888888'; // Fallback gray
+              const color = applyElevationShading(baseColor, tile.elevation);
               
               ctx.fillStyle = color;
               ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);

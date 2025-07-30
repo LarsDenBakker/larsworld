@@ -9,6 +9,33 @@ export const TILE_TYPES = [
 ] as const;
 
 export type TileType = typeof TILE_TYPES[number];
+
+// Elevation categories for enhanced visualization
+export const ELEVATION_TYPES = [
+  'flat',      // 0.0-0.4: Lowlands, plains, valleys
+  'hills',     // 0.4-0.7: Rolling hills, plateaus
+  'mountains'  // 0.7-1.0: High mountains, peaks
+] as const;
+
+export type ElevationType = typeof ELEVATION_TYPES[number];
+
+// Biome types for enhanced world generation
+export const BIOME_TYPES = [
+  'deep_ocean',      // Deep water
+  'shallow_ocean',   // Coastal water
+  'desert',          // Hot, dry land
+  'tundra',          // Cold, dry land
+  'arctic',          // Very cold land
+  'swamp',           // Warm, wet lowland
+  'grassland',       // Temperate, moderate moisture
+  'forest',          // Temperate, wet
+  'taiga',           // Cold forest
+  'savanna',         // Hot, seasonal moisture
+  'tropical_forest', // Hot, very wet
+  'alpine'           // High elevation, cold
+] as const;
+
+export type BiomeType = typeof BIOME_TYPES[number];
 export type TileIndex = number; // 0-1 index into TILE_TYPES array
 
 // Compact tile representation for API responses
@@ -21,6 +48,8 @@ export interface CompactTile {
   tmp: number;
   /** Moisture (0-255, scaled from 0-1) */
   m: number;
+  /** Biome type index */
+  b: number;
 }
 
 // Full tile representation used internally
@@ -31,6 +60,8 @@ export interface Tile {
   elevation: number; // 0-1, where 0 is sea level
   temperature: number; // 0-1, where 0 is coldest, 1 is hottest
   moisture: number; // 0-1, where 0 is driest, 1 is wettest
+  biome: BiomeType; // Calculated biome based on elevation, temperature, moisture
+  elevationType: ElevationType; // Calculated elevation category
 }
 
 // API request parameters for paginated map generation
@@ -59,6 +90,101 @@ export interface ApiError {
 }
 
 /**
+ * Determine elevation type based on elevation value
+ */
+export function getElevationType(elevation: number): ElevationType {
+  if (elevation < 0.4) return 'flat';
+  if (elevation < 0.7) return 'hills';
+  return 'mountains';
+}
+
+/**
+ * Classify biome based on elevation, temperature, and moisture
+ * Respects original land/ocean boundary: elevation < 0.5 = ocean, >= 0.5 = land
+ * Uses realistic biome placement patterns based on climate science
+ */
+export function classifyBiome(elevation: number, temperature: number, moisture: number): BiomeType {
+  // Respect the original land/ocean boundary from the base map generation
+  // This ensures we don't alter the existing land/ocean distribution
+  const isOcean = elevation < 0.5;
+  
+  if (isOcean) {
+    // Ocean biomes - distinguish between deep and shallow water
+    // Keep existing ocean areas as ocean or shallow ocean only
+    return elevation < 0.2 ? 'deep_ocean' : 'shallow_ocean';
+  }
+  
+  // Land biomes (elevation >= 0.5) - classify based on realistic climate patterns
+  // Temperature ranges: 0 (coldest) to 1 (hottest)
+  // Moisture ranges: 0 (driest) to 1 (wettest)
+  
+  // Arctic and Alpine zones (very cold)
+  if (temperature < 0.1) {
+    // Permanently frozen areas
+    return 'arctic';
+  }
+  
+  if (temperature < 0.2) {
+    // High altitude or polar regions
+    return elevation > 0.8 ? 'alpine' : 'arctic';
+  }
+  
+  // Subarctic zones (cold)
+  if (temperature < 0.35) {
+    if (moisture < 0.2) {
+      // Cold, dry = tundra
+      return 'tundra';
+    }
+    // Cold, wet = boreal forest (taiga), or alpine if very high
+    return elevation > 0.8 ? 'alpine' : 'taiga';
+  }
+  
+  // Temperate zones (moderate temperature)
+  if (temperature < 0.6) {
+    if (moisture < 0.2) {
+      // Dry temperate = grassland/steppe
+      return 'grassland';
+    }
+    if (moisture < 0.7) {
+      // Moderate moisture = temperate forest
+      return 'forest';
+    }
+    // Wet temperate = swamps in low areas, forests on hills
+    return elevation < 0.65 ? 'swamp' : 'forest';
+  }
+  
+  // Warm temperate to subtropical (warm but not hot)
+  if (temperature < 0.8) {
+    if (moisture < 0.15) {
+      // Very dry, warm = desert
+      return 'desert';
+    }
+    if (moisture < 0.4) {
+      // Dry, warm = savanna/grassland
+      return 'savanna';
+    }
+    if (moisture < 0.75) {
+      // Moderate moisture = temperate to subtropical forest
+      return 'forest';
+    }
+    // High moisture = wetlands or tropical-like forests
+    return elevation < 0.6 ? 'swamp' : 'tropical_forest';
+  }
+  
+  // Hot tropical zones (very hot)
+  if (moisture < 0.1) {
+    // Extremely dry and hot = desert
+    return 'desert';
+  }
+  if (moisture < 0.3) {
+    // Dry hot = savanna
+    return 'savanna';
+  }
+  // Wet hot = tropical forest, with swamps in low-lying areas
+  return elevation < 0.55 ? 'swamp' : 'tropical_forest';
+}
+
+/**
  * Convert a full Tile to compact representation
  */
 export function tileToCompact(tile: Tile): CompactTile {
@@ -67,11 +193,17 @@ export function tileToCompact(tile: Tile): CompactTile {
     throw new Error(`Unknown tile type: ${tile.type}`);
   }
   
+  const biomeIndex = BIOME_TYPES.indexOf(tile.biome);
+  if (biomeIndex === -1) {
+    throw new Error(`Unknown biome type: ${tile.biome}`);
+  }
+  
   return {
     t: tileIndex,
     e: Math.round(tile.elevation * 255),
     tmp: Math.round(tile.temperature * 255),
-    m: Math.round(tile.moisture * 255)
+    m: Math.round(tile.moisture * 255),
+    b: biomeIndex
   };
 }
 
@@ -79,13 +211,21 @@ export function tileToCompact(tile: Tile): CompactTile {
  * Convert compact representation back to full Tile
  */
 export function compactToTile(compact: CompactTile, x: number, y: number): Tile {
+  const elevation = compact.e / 255;
+  const temperature = compact.tmp / 255;
+  const moisture = compact.m / 255;
+  const biome = BIOME_TYPES[compact.b];
+  const elevationType = getElevationType(elevation);
+  
   return {
     type: TILE_TYPES[compact.t],
     x,
     y,
-    elevation: compact.e / 255,
-    temperature: compact.tmp / 255,
-    moisture: compact.m / 255
+    elevation,
+    temperature,
+    moisture,
+    biome,
+    elevationType
   };
 }
 

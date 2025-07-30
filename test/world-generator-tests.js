@@ -10,16 +10,21 @@ import { generateStableSeedPngs } from './stable-seed-pngs.js';
 
 
 /**
- * Test ocean coverage is 25-35% for 60×60 maps as specified
- * Only applies to maps 60×60 and larger per updated requirements
+ * Test ocean coverage is 25-35% for 60×60 chunk maps (960×960 tiles) as specified
+ * Only applies to maps 60×60 chunks and larger per updated requirements
  * Note: Chunk-based generation may not achieve exact percentages for all seeds
  * due to its stateless nature, but should be close on average
  */
 function testOceanCoverage60x60() {
   try {
-    // 60×60 ≈ 4×4 chunks (since each chunk is 16×16, gives 64×64 tiles)
-    const chunksPerSide = 4;
-    const totalSize = chunksPerSide * CHUNK_SIZE; // Should be 64
+    console.log('Starting 60×60 chunk ocean coverage test (960×960 tiles)...');
+    
+    // 60×60 chunks (each chunk is 16×16, gives 960×960 tiles total)
+    const chunksPerSide = 60;
+    const totalSize = chunksPerSide * CHUNK_SIZE; // Should be 960
+    const totalTiles = totalSize * totalSize; // 921,600 tiles
+    
+    console.log(`Testing ${chunksPerSide}×${chunksPerSide} chunks = ${totalSize}×${totalSize} tiles (${totalTiles.toLocaleString()} total)`);
     
     const testCases = [
       { seed: 12345 },
@@ -34,12 +39,19 @@ function testOceanCoverage60x60() {
     let totalOceanPercentage = 0;
     let withinSpecCount = 0;
     
-    for (const testCase of testCases) {
-      let oceanCount = 0;
-      const totalTiles = totalSize * totalSize;
+    for (let i = 0; i < testCases.length; i++) {
+      const testCase = testCases[i];
+      console.log(`  Testing seed ${testCase.seed} (${i + 1}/${testCases.length})...`);
       
-      // Generate all chunks for a 64×64 area
+      let oceanCount = 0;
+      
+      // Generate all chunks for the 960×960 area
       for (let chunkY = 0; chunkY < chunksPerSide; chunkY++) {
+        // Progress reporting for long-running test
+        if (chunkY % 10 === 0) {
+          console.log(`    Chunk row ${chunkY}/${chunksPerSide} (${((chunkY / chunksPerSide) * 100).toFixed(1)}%)`);
+        }
+        
         for (let chunkX = 0; chunkX < chunksPerSide; chunkX++) {
           const chunk = generateChunk(chunkX, chunkY, testCase.seed);
           
@@ -59,6 +71,8 @@ function testOceanCoverage60x60() {
       if (withinSpec) withinSpecCount++;
       totalOceanPercentage += oceanPercentage;
       
+      console.log(`    Result: ${oceanPercentage.toFixed(1)}% ocean coverage ${withinSpec ? '✓' : '✗'}`);
+      
       results.push({
         size: totalSize,
         seed: testCase.seed,
@@ -69,6 +83,13 @@ function testOceanCoverage60x60() {
     
     const avgOceanPercentage = totalOceanPercentage / testCases.length;
     
+    console.log(`\nOcean Coverage Results for 60×60 chunks (960×960 tiles):`);
+    for (const result of results) {
+      console.log(`  Seed ${result.seed}: ${result.oceanPercentage}% ocean ${result.withinSpec ? '✓' : '✗'}`);
+    }
+    console.log(`  Average: ${avgOceanPercentage.toFixed(1)}% ocean`);
+    console.log(`  Within spec (25-35%): ${withinSpecCount}/${testCases.length} seeds`);
+    
     // For chunk-based generation, we expect at least 30% of seeds to meet specs
     // and the average to be within reasonable range (20-40%)
     const meetsChunkBasedExpectations = 
@@ -77,16 +98,16 @@ function testOceanCoverage60x60() {
       avgOceanPercentage <= 40;
     
     return {
-      name: 'Ocean Coverage 60×60 (25-35%)',
+      name: 'Ocean Coverage 60×60 chunks (25-35%)',
       passed: meetsChunkBasedExpectations,
       message: meetsChunkBasedExpectations 
         ? `Chunk-based generation shows reasonable ocean coverage (${withinSpecCount}/${testCases.length} within spec, avg ${avgOceanPercentage.toFixed(1)}%)`
         : `Chunk-based generation ocean coverage needs improvement (${withinSpecCount}/${testCases.length} within spec, avg ${avgOceanPercentage.toFixed(1)}%)`,
-      details: { results, averageOceanPercentage: avgOceanPercentage.toFixed(1), withinSpecCount }
+      details: { results, averageOceanPercentage: avgOceanPercentage.toFixed(1), withinSpecCount, totalTiles: totalTiles.toLocaleString() }
     };
   } catch (error) {
     return {
-      name: 'Ocean Coverage 60×60 (25-35%)',
+      name: 'Ocean Coverage 60×60 chunks (25-35%)',
       passed: false,
       message: `Error: ${error.message}`
     };

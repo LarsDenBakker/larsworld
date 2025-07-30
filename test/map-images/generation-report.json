@@ -1,69 +1,69 @@
 {
-  "generatedAt": "2025-07-30T19:18:25.635Z",
-  "mapSize": "64x64",
+  "generatedAt": "2025-07-30T19:33:38.651Z",
+  "mapSize": "96x96",
   "totalMaps": 10,
-  "meetsSpecsCount": 1,
+  "meetsSpecsCount": 0,
   "results": [
     {
       "seed": 12345,
-      "oceanPercentage": "32.5",
-      "landPercentage": "67.5",
-      "meetsSpecs": true,
+      "oceanPercentage": "37.3",
+      "landPercentage": "62.7",
+      "meetsSpecs": false,
       "simplePng": "seed-12345-simple.png",
       "elevationPng": "seed-12345-elevation.png"
     },
     {
       "seed": 54321,
-      "oceanPercentage": "97.3",
-      "landPercentage": "2.7",
+      "oceanPercentage": "98.8",
+      "landPercentage": "1.2",
       "meetsSpecs": false,
       "simplePng": "seed-54321-simple.png",
       "elevationPng": "seed-54321-elevation.png"
     },
     {
       "seed": 98765,
-      "oceanPercentage": "39.2",
-      "landPercentage": "60.8",
+      "oceanPercentage": "23.3",
+      "landPercentage": "76.7",
       "meetsSpecs": false,
       "simplePng": "seed-98765-simple.png",
       "elevationPng": "seed-98765-elevation.png"
     },
     {
       "seed": 11111,
-      "oceanPercentage": "98.1",
-      "landPercentage": "1.9",
+      "oceanPercentage": "97.6",
+      "landPercentage": "2.4",
       "meetsSpecs": false,
       "simplePng": "seed-11111-simple.png",
       "elevationPng": "seed-11111-elevation.png"
     },
     {
       "seed": 77777,
-      "oceanPercentage": "99.0",
-      "landPercentage": "1.0",
+      "oceanPercentage": "99.6",
+      "landPercentage": "0.4",
       "meetsSpecs": false,
       "simplePng": "seed-77777-simple.png",
       "elevationPng": "seed-77777-elevation.png"
     },
     {
       "seed": 42424,
-      "oceanPercentage": "62.4",
-      "landPercentage": "37.6",
+      "oceanPercentage": "36.6",
+      "landPercentage": "63.4",
       "meetsSpecs": false,
       "simplePng": "seed-42424-simple.png",
       "elevationPng": "seed-42424-elevation.png"
     },
     {
       "seed": 13579,
-      "oceanPercentage": "1.4",
-      "landPercentage": "98.6",
+      "oceanPercentage": "0.6",
+      "landPercentage": "99.4",
       "meetsSpecs": false,
       "simplePng": "seed-13579-simple.png",
       "elevationPng": "seed-13579-elevation.png"
     },
     {
       "seed": 24680,
-      "oceanPercentage": "96.8",
-      "landPercentage": "3.2",
+      "oceanPercentage": "98.6",
+      "landPercentage": "1.4",
       "meetsSpecs": false,
       "simplePng": "seed-24680-simple.png",
       "elevationPng": "seed-24680-elevation.png"
@@ -78,8 +78,8 @@
     },
     {
       "seed": 27182,
-      "oceanPercentage": "21.8",
-      "landPercentage": "78.2",
+      "oceanPercentage": "21.6",
+      "landPercentage": "78.4",
       "meetsSpecs": false,
       "simplePng": "seed-27182-simple.png",
       "elevationPng": "seed-27182-elevation.png"

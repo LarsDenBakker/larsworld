@@ -20,7 +20,7 @@ export interface PngGenerationOptions {
  */
 const BIOME_COLORS: Record<BiomeType, [number, number, number]> = {
   deep_ocean: [65, 105, 225],       // Royal blue (was shallow ocean)
-  shallow_ocean: [135, 206, 235],   // Sky blue (lighter)  
+  shallow_ocean: [100, 150, 230],   // Medium blue (darker than before, lighter than deep)  
   desert: [238, 203, 173],          // Sandy beige
   tundra: [176, 196, 222],          // Light steel blue (cold, sparse)
   arctic: [248, 248, 255],          // Ghost white (ice/snow)

@@ -280,11 +280,11 @@ main {
 
 /* Biome colors - Enhanced terrain visualization */
 .legend-color.deep-ocean {
-  background-color: #19376d;
+  background-color: #4169e1;
 }
 
 .legend-color.shallow-ocean {
-  background-color: #4169e1;
+  background-color: #6496e6;
 }
 
 .legend-color.desert {

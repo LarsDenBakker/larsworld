@@ -9,6 +9,33 @@ export const TILE_TYPES = [
 ] as const;
 
 export type TileType = typeof TILE_TYPES[number];
+
+// Elevation categories for enhanced visualization
+export const ELEVATION_TYPES = [
+  'flat',      // 0.0-0.4: Lowlands, plains, valleys
+  'hills',     // 0.4-0.7: Rolling hills, plateaus
+  'mountains'  // 0.7-1.0: High mountains, peaks
+] as const;
+
+export type ElevationType = typeof ELEVATION_TYPES[number];
+
+// Biome types for enhanced world generation
+export const BIOME_TYPES = [
+  'deep_ocean',      // Deep water
+  'shallow_ocean',   // Coastal water
+  'desert',          // Hot, dry land
+  'tundra',          // Cold, dry land
+  'arctic',          // Very cold land
+  'swamp',           // Warm, wet lowland
+  'grassland',       // Temperate, moderate moisture
+  'forest',          // Temperate, wet
+  'taiga',           // Cold forest
+  'savanna',         // Hot, seasonal moisture
+  'tropical_forest', // Hot, very wet
+  'alpine'           // High elevation, cold
+] as const;
+
+export type BiomeType = typeof BIOME_TYPES[number];
 export type TileIndex = number; // 0-1 index into TILE_TYPES array
 
 // Compact tile representation for API responses
@@ -21,6 +48,8 @@ export interface CompactTile {
   tmp: number;
   /** Moisture (0-255, scaled from 0-1) */
   m: number;
+  /** Biome type index */
+  b: number;
 }
 
 // Full tile representation used internally
@@ -31,6 +60,8 @@ export interface Tile {
   elevation: number; // 0-1, where 0 is sea level
   temperature: number; // 0-1, where 0 is coldest, 1 is hottest
   moisture: number; // 0-1, where 0 is driest, 1 is wettest
+  biome: BiomeType; // Calculated biome based on elevation, temperature, moisture
+  elevationType: ElevationType; // Calculated elevation category
 }
 
 // API request parameters for paginated map generation
@@ -59,6 +90,49 @@ export interface ApiError {
 }
 
 /**
+ * Determine elevation type based on elevation value
+ */
+export function getElevationType(elevation: number): ElevationType {
+  if (elevation < 0.4) return 'flat';
+  if (elevation < 0.7) return 'hills';
+  return 'mountains';
+}
+
+/**
+ * Classify biome based on elevation, temperature, and moisture
+ */
+export function classifyBiome(elevation: number, temperature: number, moisture: number): BiomeType {
+  // Ocean biomes
+  if (elevation < 0.5) {
+    return elevation < 0.2 ? 'deep_ocean' : 'shallow_ocean';
+  }
+  
+  // Land biomes - based on temperature and moisture primarily
+  // Very cold temperatures
+  if (temperature < 0.2) {
+    return elevation > 0.6 ? 'alpine' : 'arctic';
+  }
+  
+  // Cold temperatures
+  if (temperature < 0.4) {
+    if (moisture < 0.3) return 'tundra';
+    return elevation > 0.6 ? 'alpine' : 'taiga';
+  }
+  
+  // Moderate temperatures
+  if (temperature < 0.7) {
+    if (moisture < 0.3) return 'grassland';
+    if (moisture < 0.7) return 'forest';
+    return elevation < 0.3 ? 'swamp' : 'forest';
+  }
+  
+  // Hot temperatures
+  if (moisture < 0.3) return 'desert';
+  if (moisture < 0.6) return 'savanna';
+  return 'tropical_forest';
+}
+
+/**
  * Convert a full Tile to compact representation
  */
 export function tileToCompact(tile: Tile): CompactTile {
@@ -67,11 +141,17 @@ export function tileToCompact(tile: Tile): CompactTile {
     throw new Error(`Unknown tile type: ${tile.type}`);
   }
   
+  const biomeIndex = BIOME_TYPES.indexOf(tile.biome);
+  if (biomeIndex === -1) {
+    throw new Error(`Unknown biome type: ${tile.biome}`);
+  }
+  
   return {
     t: tileIndex,
     e: Math.round(tile.elevation * 255),
     tmp: Math.round(tile.temperature * 255),
-    m: Math.round(tile.moisture * 255)
+    m: Math.round(tile.moisture * 255),
+    b: biomeIndex
   };
 }
 
@@ -79,13 +159,21 @@ export function tileToCompact(tile: Tile): CompactTile {
  * Convert compact representation back to full Tile
  */
 export function compactToTile(compact: CompactTile, x: number, y: number): Tile {
+  const elevation = compact.e / 255;
+  const temperature = compact.tmp / 255;
+  const moisture = compact.m / 255;
+  const biome = BIOME_TYPES[compact.b];
+  const elevationType = getElevationType(elevation);
+  
   return {
     type: TILE_TYPES[compact.t],
     x,
     y,
-    elevation: compact.e / 255,
-    temperature: compact.tmp / 255,
-    moisture: compact.m / 255
+    elevation,
+    temperature,
+    moisture,
+    biome,
+    elevationType
   };
 }
 

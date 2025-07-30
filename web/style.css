@@ -278,13 +278,64 @@ main {
   font-weight: 500;
 }
 
-/* Terrain colors - Only ocean and land as per specs */
-.legend-color.ocean {
-  background-color: #1e40af;
+/* Biome colors - Enhanced terrain visualization */
+.legend-color.deep-ocean {
+  background-color: #19376d;
 }
 
-.legend-color.land {
-  background-color: #22c55e;
+.legend-color.shallow-ocean {
+  background-color: #4169e1;
+}
+
+.legend-color.desert {
+  background-color: #eecbad;
+}
+
+.legend-color.tundra {
+  background-color: #b0c4de;
+}
+
+.legend-color.arctic {
+  background-color: #f8f8ff;
+}
+
+.legend-color.swamp {
+  background-color: #556b2f;
+}
+
+.legend-color.grassland {
+  background-color: #7cfc00;
+}
+
+.legend-color.forest {
+  background-color: #228b22;
+}
+
+.legend-color.taiga {
+  background-color: #487648;
+}
+
+.legend-color.savanna {
+  background-color: #bdb76b;
+}
+
+.legend-color.tropical-forest {
+  background-color: #006400;
+}
+
+.legend-color.alpine {
+  background-color: #a9a9a9;
+}
+
+.legend-note {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(0,0,0,0.1);
+}
+
+.legend-note small {
+  color: #6b7280;
+  font-style: italic;
 }
 
 /* Progress indicator styling */

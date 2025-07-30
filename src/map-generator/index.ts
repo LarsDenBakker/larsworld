@@ -5,6 +5,8 @@ export interface Tile {
   elevation: number; // 0-1, where 0 is sea level
   temperature: number; // 0-1, where 0 is coldest, 1 is hottest
   moisture: number; // 0-1, where 0 is driest, 1 is wettest
+  biome: BiomeType; // Calculated biome based on elevation, temperature, moisture
+  elevationType: ElevationType; // Calculated elevation category
 }
 
 // Import shared types for paginated generation
@@ -12,7 +14,11 @@ import {
   MapPageRequest, 
   MapPageResponse, 
   CompactTile, 
-  tileToCompact 
+  tileToCompact,
+  BiomeType,
+  ElevationType,
+  classifyBiome,
+  getElevationType
 } from '../shared/types.js';
 
 /**
@@ -352,13 +358,19 @@ export function generateMap(width: number, height: number, seed?: number): Tile[
       // Determine tile type based on specs (land or ocean)
       const tileType = getTileType(elevation);
       
+      // Classify biome and elevation type
+      const biome = classifyBiome(elevation, temperature, moisture);
+      const elevationType = getElevationType(elevation);
+
       row.push({
         type: tileType,
         x,
         y,
         elevation,
         temperature,
-        moisture
+        moisture,
+        biome,
+        elevationType
       });
     }
     map.push(row);
@@ -650,13 +662,19 @@ function generateTileAt(x: number, y: number, width: number, height: number, see
   // Determine tile type based on specs (land or ocean)
   const tileType = getTileType(elevation);
   
+  // Classify biome and elevation type
+  const biome = classifyBiome(elevation, temperature, moisture);
+  const elevationType = getElevationType(elevation);
+  
   return {
     type: tileType,
     x,
     y,
     elevation,
     temperature,
-    moisture
+    moisture,
+    biome,
+    elevationType
   };
 }
 

@@ -15,21 +15,22 @@ export interface PngGenerationOptions {
 }
 
 /**
- * Biome color palette - base colors for each biome
+ * Biome color palette - realistic earth-tone colors for each biome
+ * Colors chosen to represent real-world biome appearances
  */
 const BIOME_COLORS: Record<BiomeType, [number, number, number]> = {
-  deep_ocean: [25, 55, 109],      // Deep blue
-  shallow_ocean: [65, 105, 225],  // Royal blue
-  desert: [238, 203, 173],        // Sandy beige
-  tundra: [176, 196, 222],        // Light steel blue
-  arctic: [248, 248, 255],        // Ghost white
-  swamp: [85, 107, 47],           // Dark olive green
-  grassland: [124, 252, 0],       // Lawn green
-  forest: [34, 139, 34],          // Forest green
-  taiga: [72, 118, 72],           // Dark sea green
-  savanna: [189, 183, 107],       // Dark khaki
-  tropical_forest: [0, 100, 0],   // Dark green
-  alpine: [169, 169, 169]         // Dark gray
+  deep_ocean: [8, 48, 107],         // Deep navy blue
+  shallow_ocean: [65, 105, 225],    // Royal blue  
+  desert: [238, 203, 173],          // Sandy beige
+  tundra: [176, 196, 222],          // Light steel blue (cold, sparse)
+  arctic: [248, 248, 255],          // Ghost white (ice/snow)
+  swamp: [85, 107, 47],             // Dark olive green (muddy water)
+  grassland: [124, 252, 0],         // Lawn green (vibrant grass)
+  forest: [34, 139, 34],            // Forest green (dense temperate forest)
+  taiga: [60, 100, 60],             // Dark green (coniferous forest)
+  savanna: [189, 183, 107],         // Dark khaki (dry grassland)
+  tropical_forest: [0, 100, 0],     // Dark green (dense jungle)
+  alpine: [169, 169, 169]           // Dark gray (rocky mountain peaks)
 };
 
 /**

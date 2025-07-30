@@ -100,36 +100,88 @@ export function getElevationType(elevation: number): ElevationType {
 
 /**
  * Classify biome based on elevation, temperature, and moisture
+ * Respects original land/ocean boundary: elevation < 0.5 = ocean, >= 0.5 = land
+ * Uses realistic biome placement patterns based on climate science
  */
 export function classifyBiome(elevation: number, temperature: number, moisture: number): BiomeType {
-  // Ocean biomes
-  if (elevation < 0.5) {
+  // Respect the original land/ocean boundary from the base map generation
+  // This ensures we don't alter the existing land/ocean distribution
+  const isOcean = elevation < 0.5;
+  
+  if (isOcean) {
+    // Ocean biomes - distinguish between deep and shallow water
+    // Keep existing ocean areas as ocean or shallow ocean only
     return elevation < 0.2 ? 'deep_ocean' : 'shallow_ocean';
   }
   
-  // Land biomes - based on temperature and moisture primarily
-  // Very cold temperatures
+  // Land biomes (elevation >= 0.5) - classify based on realistic climate patterns
+  // Temperature ranges: 0 (coldest) to 1 (hottest)
+  // Moisture ranges: 0 (driest) to 1 (wettest)
+  
+  // Arctic and Alpine zones (very cold)
+  if (temperature < 0.1) {
+    // Permanently frozen areas
+    return 'arctic';
+  }
+  
   if (temperature < 0.2) {
-    return elevation > 0.6 ? 'alpine' : 'arctic';
+    // High altitude or polar regions
+    return elevation > 0.8 ? 'alpine' : 'arctic';
   }
   
-  // Cold temperatures
-  if (temperature < 0.4) {
-    if (moisture < 0.3) return 'tundra';
-    return elevation > 0.6 ? 'alpine' : 'taiga';
+  // Subarctic zones (cold)
+  if (temperature < 0.35) {
+    if (moisture < 0.2) {
+      // Cold, dry = tundra
+      return 'tundra';
+    }
+    // Cold, wet = boreal forest (taiga), or alpine if very high
+    return elevation > 0.8 ? 'alpine' : 'taiga';
   }
   
-  // Moderate temperatures
-  if (temperature < 0.7) {
-    if (moisture < 0.3) return 'grassland';
-    if (moisture < 0.7) return 'forest';
-    return elevation < 0.3 ? 'swamp' : 'forest';
+  // Temperate zones (moderate temperature)
+  if (temperature < 0.6) {
+    if (moisture < 0.2) {
+      // Dry temperate = grassland/steppe
+      return 'grassland';
+    }
+    if (moisture < 0.7) {
+      // Moderate moisture = temperate forest
+      return 'forest';
+    }
+    // Wet temperate = swamps in low areas, forests on hills
+    return elevation < 0.65 ? 'swamp' : 'forest';
   }
   
-  // Hot temperatures
-  if (moisture < 0.3) return 'desert';
-  if (moisture < 0.6) return 'savanna';
-  return 'tropical_forest';
+  // Warm temperate to subtropical (warm but not hot)
+  if (temperature < 0.8) {
+    if (moisture < 0.15) {
+      // Very dry, warm = desert
+      return 'desert';
+    }
+    if (moisture < 0.4) {
+      // Dry, warm = savanna/grassland
+      return 'savanna';
+    }
+    if (moisture < 0.75) {
+      // Moderate moisture = temperate to subtropical forest
+      return 'forest';
+    }
+    // High moisture = wetlands or tropical-like forests
+    return elevation < 0.6 ? 'swamp' : 'tropical_forest';
+  }
+  
+  // Hot tropical zones (very hot)
+  if (moisture < 0.1) {
+    // Extremely dry and hot = desert
+    return 'desert';
+  }
+  if (moisture < 0.3) {
+    // Dry hot = savanna
+    return 'savanna';
+  }
+  // Wet hot = tropical forest, with swamps in low-lying areas
+  return elevation < 0.55 ? 'swamp' : 'tropical_forest';
 }
 
 /**

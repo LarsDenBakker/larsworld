@@ -278,45 +278,13 @@ main {
   font-weight: 500;
 }
 
-/* Terrain colors - Earth-like realistic colors */
+/* Terrain colors - Only ocean and land as per specs */
 .legend-color.ocean {
   background-color: #1e40af;
 }
 
-.legend-color.shallow_water {
-  background-color: #3b82f6;
-}
-
-.legend-color.beach {
-  background-color: #fbbf24;
-}
-
-.legend-color.desert {
-  background-color: #f59e0b;
-}
-
-.legend-color.grassland {
+.legend-color.land {
   background-color: #22c55e;
-}
-
-.legend-color.forest {
-  background-color: #16a34a;
-}
-
-.legend-color.tundra {
-  background-color: #f3f4f6;
-}
-
-.legend-color.mountain {
-  background-color: #6b7280;
-}
-
-.legend-color.snow {
-  background-color: #ffffff;
-}
-
-.legend-color.swamp {
-  background-color: #059669;
 }
 
 /* Progress indicator styling */

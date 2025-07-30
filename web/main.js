@@ -111,24 +111,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Fixed dimensions for 1000x1000 maps
         const width = 1000;
         const height = 1000;
-        // Biome types for converting compact format
-        const BIOME_TYPES = [
-          'ocean', 'shallow_water', 'beach', 'desert', 'grassland',
-          'forest', 'tundra', 'mountain', 'snow', 'swamp'
-        ];
+        // Tile types as per API specification (only land and ocean)
+        const TILE_TYPES = ['ocean', 'land'];
 
-        // Color mapping for biomes
+        // Color mapping for tile types - using earth-like realistic colors
         const colors = {
-          ocean: '#1e40af',
-          shallow_water: '#3b82f6',
-          beach: '#fbbf24',
-          desert: '#f59e0b',
-          grassland: '#22c55e',
-          forest: '#16a34a',
-          tundra: '#f3f4f6',
-          mountain: '#6b7280',
-          snow: '#ffffff',
-          swamp: '#059669'
+          ocean: '#1e40af',  // Deep blue for ocean
+          land: '#22c55e'    // Green for land
         };
 
         // Create progress indicator with modern styling
@@ -161,20 +150,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const ctx = canvas.getContext('2d');
 
-        // Fetch first page to determine total pages
-        progressText.textContent = 'Fetching first page...';
-        const firstPageUrl = `/api/map?page=0&pageSize=${pageSize}&seed=${encodeURIComponent(seed)}`;
-        const firstResponse = await fetch(firstPageUrl);
+        // Fetch first page to determine total pages but also start parallel fetching
+        progressText.textContent = 'Starting parallel world generation...';
         
-        if (!firstResponse.ok) {
-          const error = await firstResponse.json();
-          throw new Error(error.error || `HTTP ${firstResponse.status}`);
-        }
+        // Start with 5 concurrent requests including the first page
+        const initialConcurrency = 5;
+        const initialPages = Array.from({length: initialConcurrency}, (_, i) => i);
+        
+        progressText.textContent = `Fetching first ${initialConcurrency} pages in parallel...`;
+        
+        // Create parallel fetch promises for initial pages
+        const initialPromises = initialPages.map(async (page) => {
+          const pageUrl = `/api/map?page=${page}&pageSize=${pageSize}&seed=${encodeURIComponent(seed)}`;
+          const response = await fetch(pageUrl);
+          
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(`Page ${page}: ${error.error || `HTTP ${response.status}`}`);
+          }
 
-        const firstPage = await firstResponse.json();
-        const totalPages = firstPage.totalPages;
+          const pageData = await response.json();
+          return { page, pageData };
+        });
 
-        console.log(`Map will be generated in ${totalPages} pages, first page size: ${Math.round(firstPage.sizeBytes / 1024)}KB`);
+        // Wait for initial batch to complete
+        const initialResults = await Promise.all(initialPromises);
+        
+        // Sort by page number and get total pages from first result
+        initialResults.sort((a, b) => a.page - b.page);
+        const firstPageData = initialResults[0].pageData;
+        const totalPages = firstPageData.totalPages;
+
+        console.log(`Map will be generated in ${totalPages} pages, starting with ${initialConcurrency} concurrent requests`);
 
         // Add canvas to container
         mapContainer.appendChild(canvas);
@@ -182,11 +189,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Convert compact tile to full tile format
         function compactToTile(compact, x, y) {
           return {
-            type: BIOME_TYPES[compact.b],
+            type: TILE_TYPES[compact.t], // Use 't' field for tile type index
             x,
             y,
             elevation: compact.e / 255,
-            temperature: compact.t / 255,
+            temperature: compact.tmp / 255, // Use 'tmp' field for temperature  
             moisture: compact.m / 255
           };
         }
@@ -206,10 +213,12 @@ document.addEventListener('DOMContentLoaded', () => {
           });
         }
 
-        // Render first page
-        renderPage(firstPage);
+        // Render initial pages in order
+        for (const { pageData } of initialResults) {
+          renderPage(pageData);
+        }
 
-        let pagesComplete = 1;
+        let pagesComplete = initialResults.length;
         const updateProgress = () => {
           const progress = (pagesComplete / totalPages) * 100;
           progressBar.style.width = `${progress}%`;
@@ -218,50 +227,52 @@ document.addEventListener('DOMContentLoaded', () => {
 
         updateProgress();
 
-        // Fetch remaining pages in parallel with concurrency limit for improved performance
-        // Using batched parallel requests instead of sequential to reduce total generation time
-        const concurrencyLimit = 10; // Limit concurrent requests to avoid overwhelming the server
-        const remainingPages = Array.from({length: totalPages - 1}, (_, i) => i + 1);
-        
-        // Process pages in parallel batches
-        for (let i = 0; i < remainingPages.length; i += concurrencyLimit) {
-          const batch = remainingPages.slice(i, i + concurrencyLimit);
-          progressText.textContent = `Fetching pages ${batch[0] + 1}-${batch[batch.length - 1] + 1}...`;
+        // Continue fetching remaining pages if there are more than the initial batch
+        if (totalPages > initialConcurrency) {
+          // Fetch remaining pages in parallel with concurrency limit for improved performance
+          const concurrencyLimit = 10; // Limit concurrent requests to avoid overwhelming the server
+          const remainingPages = Array.from({length: totalPages - initialConcurrency}, (_, i) => i + initialConcurrency);
           
-          // Create parallel fetch promises for this batch
-          const batchPromises = batch.map(async (page) => {
-            const pageUrl = `/api/map?page=${page}&pageSize=${pageSize}&seed=${encodeURIComponent(seed)}`;
-            const response = await fetch(pageUrl);
+          // Process remaining pages in parallel batches
+          for (let i = 0; i < remainingPages.length; i += concurrencyLimit) {
+            const batch = remainingPages.slice(i, i + concurrencyLimit);
+            progressText.textContent = `Fetching pages ${batch[0] + 1}-${batch[batch.length - 1] + 1}...`;
             
-            if (!response.ok) {
-              const error = await response.json();
-              throw new Error(`Page ${page}: ${error.error || `HTTP ${response.status}`}`);
+            // Create parallel fetch promises for this batch
+            const batchPromises = batch.map(async (page) => {
+              const pageUrl = `/api/map?page=${page}&pageSize=${pageSize}&seed=${encodeURIComponent(seed)}`;
+              const response = await fetch(pageUrl);
+              
+              if (!response.ok) {
+                const error = await response.json();
+                throw new Error(`Page ${page}: ${error.error || `HTTP ${response.status}`}`);
+              }
+
+              const pageData = await response.json();
+              return { page, pageData };
+            });
+
+            try {
+              // Wait for all pages in this batch to complete
+              const batchResults = await Promise.all(batchPromises);
+              
+              // Sort by page number to ensure correct rendering order
+              batchResults.sort((a, b) => a.page - b.page);
+              
+              // Render pages in order
+              for (const { pageData } of batchResults) {
+                renderPage(pageData);
+                pagesComplete++;
+                updateProgress();
+              }
+
+              // Small delay to allow UI updates between batches
+              await new Promise(resolve => setTimeout(resolve, 10));
+
+            } catch (error) {
+              console.error(`Failed to fetch batch starting at page ${batch[0]}:`, error);
+              throw error;
             }
-
-            const pageData = await response.json();
-            return { page, pageData };
-          });
-
-          try {
-            // Wait for all pages in this batch to complete
-            const batchResults = await Promise.all(batchPromises);
-            
-            // Sort by page number to ensure correct rendering order
-            batchResults.sort((a, b) => a.page - b.page);
-            
-            // Render pages in order
-            for (const { pageData } of batchResults) {
-              renderPage(pageData);
-              pagesComplete++;
-              updateProgress();
-            }
-
-            // Small delay to allow UI updates between batches
-            await new Promise(resolve => setTimeout(resolve, 10));
-
-          } catch (error) {
-            console.error(`Failed to fetch batch starting at page ${batch[0]}:`, error);
-            throw error;
           }
         }
 
@@ -273,9 +284,9 @@ document.addEventListener('DOMContentLoaded', () => {
         infoContainer.className = 'info-container';
         infoContainer.innerHTML = `
           <strong>World Generated Successfully!</strong><br>
-          ${width}×${height} tiles • ${totalPages} pages<br>
+          ${width}×${height} tiles • ${totalPages} sections<br>
           Seed: <strong>"${seed}"</strong><br>
-          <small>Using paginated API (${tileSize}px per tile)</small>
+          <small>Generated using parallel loading (${tileSize}px per tile)</small>
         `;
         mapContainer.appendChild(infoContainer);
 

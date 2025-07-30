@@ -47,10 +47,9 @@ The world generator uses:
 ## Files Created
 
 ### Core Implementation:
-- `src/map-generator/index.ts` - Main world generator (rewritten)
-- `src/map-generator/paginated.ts` - Updated for new tile types
+- `src/map-generator/index.ts` - Unified world generator with both full and paginated generation
 - `src/map-generator/png-generator.ts` - PNG utility with Sharp
-- `src/shared/types.ts` - Updated type definitions
+- `src/shared/types.ts` - Shared type definitions for API
 
 ### Testing:
 - `test/world-generator-tests.js` - Spec-based unit tests

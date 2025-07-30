@@ -7,6 +7,14 @@ export interface Tile {
   moisture: number; // 0-1, where 0 is driest, 1 is wettest
 }
 
+// Import shared types for paginated generation
+import { 
+  MapPageRequest, 
+  MapPageResponse, 
+  CompactTile, 
+  tileToCompact 
+} from '../shared/types.js';
+
 /**
  * Simple Perlin noise implementation for terrain generation
  * Based on Ken Perlin's improved noise function
@@ -357,4 +365,403 @@ export function generateMap(width: number, height: number, seed?: number): Tile[
   }
   
   return map;
+}
+
+/**
+ * Calculate the dynamic threshold for a given seed by sampling the elevation distribution
+ * This ensures paginated generation uses the same threshold as full generation
+ */
+function calculateDynamicThreshold(width: number, height: number, seed: number): number {
+  // Sample every 10th coordinate to get a representative distribution (much faster than full map)
+  const sampleStep = 10;
+  const elevationSamples: number[] = [];
+  
+  // Create seeded random function and continent setup (same as calculateLandStrengthAt)
+  const random = seedRandom(seed);
+  const numContinents = Math.floor(random() * 3) + 1;
+  
+  const continentNoise = new PerlinNoise(seed);
+  const detailNoise = new PerlinNoise(seed + 100);
+  const warpNoiseX = new PerlinNoise(seed + 200);
+  const warpNoiseY = new PerlinNoise(seed + 300);
+  
+  // Generate continent centers (same logic as calculateLandStrengthAt)
+  const continentCenters: Array<{x: number, y: number}> = [];
+  const minSeparation = width * 0.05;
+  
+  for (let i = 0; i < numContinents; i++) {
+    let attempts = 0;
+    let validPosition = false;
+    let continentX = width * 0.5;
+    let continentY = height * 0.5;
+    
+    while (!validPosition && attempts < 100) {
+      continentX = (width * 0.15) + random() * (width * 0.7);
+      continentY = (height * 0.15) + random() * (height * 0.7);
+      
+      validPosition = true;
+      for (const existing of continentCenters) {
+        const distance = Math.sqrt(
+          Math.pow(continentX - existing.x, 2) + 
+          Math.pow(continentY - existing.y, 2)
+        );
+        if (distance < minSeparation) {
+          validPosition = false;
+          break;
+        }
+      }
+      attempts++;
+    }
+    
+    if (!validPosition) {
+      if (i === 1) {
+        continentX = width * 0.25;
+        continentY = height * 0.5;
+      } else if (i === 2) {
+        continentX = width * 0.75;
+        continentY = height * 0.5;
+      }
+    }
+    
+    continentCenters.push({ x: continentX, y: continentY });
+  }
+  
+  // Sample elevation values using the same algorithm as calculateLandStrengthAt
+  for (let y = 0; y < height; y += sampleStep) {
+    for (let x = 0; x < width; x += sampleStep) {
+      // Apply domain warping for natural, irregular shapes
+      const warpStrength = 15.0;
+      const warpX = x + warpNoiseX.octaveNoise(x * 0.008, y * 0.008, 3, 0.5) * warpStrength;
+      const warpY = y + warpNoiseY.octaveNoise(x * 0.008, y * 0.008, 3, 0.5) * warpStrength;
+      
+      // Large-scale continent shape (low frequency, high amplitude)
+      const continentShape = continentNoise.octaveNoise(warpX * 0.003, warpY * 0.003, 3, 0.6);
+      
+      // Medium-scale features (moderate frequency and amplitude)
+      const mediumFeatures = continentNoise.octaveNoise(warpX * 0.008, warpY * 0.008, 4, 0.5);
+      
+      // Fine-scale coastal details (high frequency, low amplitude)
+      const coastalDetails = detailNoise.octaveNoise(warpX * 0.02, warpY * 0.02, 3, 0.4);
+      
+      // Combine noise layers for natural landmass shape
+      let elevation = continentShape * 0.6 + mediumFeatures * 0.3 + coastalDetails * 0.1;
+      
+      // Add distance-based influence from continent centers for separation
+      let centerInfluence = 0;
+      for (const center of continentCenters) {
+        const dx = (x - center.x) / (width * 0.3); // Influence area
+        const dy = (y - center.y) / (height * 0.3);
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Smooth falloff from continent centers
+        const influence = Math.max(0, 1 - Math.pow(distance, 1.8));
+        centerInfluence = Math.max(centerInfluence, influence);
+      }
+      
+      // Ensure we always have some landmass near continent centers
+      const landBoost = centerInfluence * 0.35; // Moderate land boost
+      
+      // Combine noise elevation with center influence
+      elevation = elevation * 0.65 + centerInfluence * 0.18 + landBoost;
+      
+      // Normalize to 0-1 and clamp
+      elevation = (elevation + 1) / 2; // Normalize to 0-1
+      elevation = Math.max(0, Math.min(1, elevation));
+      
+      elevationSamples.push(elevation);
+    }
+  }
+  
+  // Apply the same post-processing logic as generateContinents
+  elevationSamples.sort((a, b) => a - b);
+  const targetOceanPercent = 0.32; // Same as in generateContinents
+  const oceanThresholdIndex = Math.floor(elevationSamples.length * targetOceanPercent);
+  return elevationSamples[oceanThresholdIndex];
+}
+
+// Cache for dynamic thresholds to avoid recalculating for the same seed
+const thresholdCache = new Map<string, number>();
+
+/**
+ * Calculate land strength for a single coordinate using the same continental algorithm as generateMap
+ * This is an optimized, stateless version that uses the correct dynamic threshold
+ */
+function calculateLandStrengthAt(x: number, y: number, width: number, height: number, seed: number): number {
+  // Get or calculate the dynamic threshold for this seed
+  const cacheKey = `${seed}_${width}_${height}`;
+  let dynamicThreshold = thresholdCache.get(cacheKey);
+  
+  if (dynamicThreshold === undefined) {
+    dynamicThreshold = calculateDynamicThreshold(width, height, seed);
+    thresholdCache.set(cacheKey, dynamicThreshold);
+  }
+  
+  // Create seeded random function (same as in generateContinents)
+  const random = seedRandom(seed);
+  
+  // Determine number of continents (1, 2, or 3) - same logic as generateContinents
+  const numContinents = Math.floor(random() * 3) + 1;
+  
+  // Create multiple noise generators for different purposes (same as generateContinents)
+  const continentNoise = new PerlinNoise(seed);
+  const detailNoise = new PerlinNoise(seed + 100);
+  const warpNoiseX = new PerlinNoise(seed + 200);
+  const warpNoiseY = new PerlinNoise(seed + 300);
+  
+  // Generate continent centers ensuring proper separation (same logic as generateContinents)
+  const continentCenters: Array<{x: number, y: number}> = [];
+  const minSeparation = width * 0.05;
+  
+  for (let i = 0; i < numContinents; i++) {
+    let attempts = 0;
+    let validPosition = false;
+    let continentX = width * 0.5;
+    let continentY = height * 0.5;
+    
+    while (!validPosition && attempts < 100) {
+      continentX = (width * 0.15) + random() * (width * 0.7);
+      continentY = (height * 0.15) + random() * (height * 0.7);
+      
+      validPosition = true;
+      for (const existing of continentCenters) {
+        const distance = Math.sqrt(
+          Math.pow(continentX - existing.x, 2) + 
+          Math.pow(continentY - existing.y, 2)
+        );
+        if (distance < minSeparation) {
+          validPosition = false;
+          break;
+        }
+      }
+      attempts++;
+    }
+    
+    if (!validPosition) {
+      // Fallback positioning for multiple continents
+      if (i === 1) {
+        continentX = width * 0.25;
+        continentY = height * 0.5;
+      } else if (i === 2) {
+        continentX = width * 0.75;
+        continentY = height * 0.5;
+      }
+    }
+    
+    continentCenters.push({ x: continentX, y: continentY });
+  }
+  
+  // Calculate elevation for this specific coordinate (same algorithm as generateContinents)
+  
+  // Apply domain warping for natural, irregular shapes
+  const warpStrength = 15.0;
+  const warpX = x + warpNoiseX.octaveNoise(x * 0.008, y * 0.008, 3, 0.5) * warpStrength;
+  const warpY = y + warpNoiseY.octaveNoise(x * 0.008, y * 0.008, 3, 0.5) * warpStrength;
+  
+  // Large-scale continent shape (low frequency, high amplitude)
+  const continentShape = continentNoise.octaveNoise(warpX * 0.003, warpY * 0.003, 3, 0.6);
+  
+  // Medium-scale features (moderate frequency and amplitude)
+  const mediumFeatures = continentNoise.octaveNoise(warpX * 0.008, warpY * 0.008, 4, 0.5);
+  
+  // Fine-scale coastal details (high frequency, low amplitude)
+  const coastalDetails = detailNoise.octaveNoise(warpX * 0.02, warpY * 0.02, 3, 0.4);
+  
+  // Combine noise layers for natural landmass shape
+  let elevation = continentShape * 0.6 + mediumFeatures * 0.3 + coastalDetails * 0.1;
+  
+  // Add distance-based influence from continent centers for separation
+  let centerInfluence = 0;
+  for (const center of continentCenters) {
+    const dx = (x - center.x) / (width * 0.3); // Influence area
+    const dy = (y - center.y) / (height * 0.3);
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Smooth falloff from continent centers
+    const influence = Math.max(0, 1 - Math.pow(distance, 1.8));
+    centerInfluence = Math.max(centerInfluence, influence);
+  }
+  
+  // Ensure we always have some landmass near continent centers
+  const landBoost = centerInfluence * 0.35; // Moderate land boost
+  
+  // Combine noise elevation with center influence
+  elevation = elevation * 0.65 + centerInfluence * 0.18 + landBoost;
+  
+  // Normalize to 0-1 and clamp
+  elevation = (elevation + 1) / 2; // Normalize to 0-1
+  elevation = Math.max(0, Math.min(1, elevation));
+  
+  // Apply the dynamic threshold (same logic as generateContinents post-processing)
+  if (elevation < dynamicThreshold) {
+    return 0.1; // Ocean elevation
+  } else {
+    // Scale land elevations to be above ocean threshold
+    return 0.5 + (elevation - dynamicThreshold) / (1 - dynamicThreshold) * 0.5;
+  }
+}
+
+/**
+ * Generate a single tile at specific coordinates using the same algorithm as generateMap
+ * This ensures consistency between full map generation and paginated generation
+ */
+function generateTileAt(x: number, y: number, width: number, height: number, seed: number): Tile {
+  // Use the same noise generators as generateMap with the same seeds
+  const elevationNoise = new PerlinNoise(seed + 1);
+  const temperatureNoise = new PerlinNoise(seed + 2);
+  const moistureNoise = new PerlinNoise(seed + 3);
+  
+  // Calculate land strength using optimized stateless function
+  const landStrength = calculateLandStrengthAt(x, y, width, height, seed);
+  
+  // Apply the same elevation calculation as generateMap
+  let elevation = landStrength;
+  
+  // Add detailed terrain elevation using noise for land areas
+  if (landStrength > 0.1) {
+    const terrainElevation = elevationNoise.octaveNoise(x * 0.01, y * 0.01, 6, 0.5);
+    const terrainVariation = (terrainElevation + 1) / 2; // Normalize to 0-1
+    
+    // Combine base land shape with terrain details
+    elevation = landStrength * 0.7 + terrainVariation * landStrength * 0.5;
+    
+    // Ensure minimum land elevation
+    elevation = Math.max(elevation, 0.31);
+  } else {
+    // Ocean areas - add seafloor variation
+    const seafloorVariation = elevationNoise.octaveNoise(x * 0.005, y * 0.005, 3, 0.3);
+    elevation = 0.1 + Math.max(0, seafloorVariation * 0.1);
+  }
+  
+  // Clamp elevation to valid range
+  elevation = Math.max(0, Math.min(1, elevation));
+  
+  // Generate temperature based on latitude and elevation (same as generateMap)
+  const latitudeFactor = Math.abs((y / height) - 0.5) * 2; // 0 at equator, 1 at poles
+  let temperature = 1 - latitudeFactor; // Hot at equator, cold at poles
+  temperature += temperatureNoise.octaveNoise(x * 0.008, y * 0.008, 3, 0.3) * 0.3;
+  temperature -= elevation * 0.5; // Higher elevation = colder
+  temperature = Math.max(0, Math.min(1, temperature));
+  
+  // Generate moisture patterns (same as generateMap)
+  let moisture = moistureNoise.octaveNoise(x * 0.012, y * 0.012, 4, 0.4);
+  moisture = (moisture + 1) / 2; // Normalize to 0-1
+  moisture = Math.max(0, Math.min(1, moisture));
+  
+  // Determine tile type based on specs (land or ocean)
+  const tileType = getTileType(elevation);
+  
+  return {
+    type: tileType,
+    x,
+    y,
+    elevation,
+    temperature,
+    moisture
+  };
+}
+
+/**
+ * Calculate optimal page size to stay under 6MB limit
+ */
+function calculateOptimalPageSize(width: number): number {
+  // Each compact tile is roughly 25 bytes when JSON stringified
+  // 6MB = 6 * 1024 * 1024 = 6,291,456 bytes
+  // Add overhead for response metadata (~1000 bytes)
+  const maxPayloadSize = 6 * 1024 * 1024 - 1000;
+  const bytesPerTile = 25;
+  const bytesPerRow = width * bytesPerTile;
+  
+  // Calculate max rows that fit in 6MB
+  const maxRows = Math.floor(maxPayloadSize / bytesPerRow);
+  
+  // Ensure minimum of 1 row and maximum of reasonable chunk size
+  return Math.max(1, Math.min(maxRows, 256));
+}
+
+/**
+ * Generate a page of map data using the same algorithm as generateMap
+ * This ensures perfect consistency between full and paginated generation
+ */
+export function generateMapPage(request: MapPageRequest): MapPageResponse {
+  const { page, pageSize, seed } = request;
+  
+  // Parse seed - support both string and number seeds for compatibility
+  const seedNumber = typeof seed === 'string' ? hashSeed(seed) : seed;
+  
+  // For now, support only 1000x1000 maps for API compatibility
+  // This matches the current paginated API behavior
+  const width = 1000;
+  const height = 1000;
+  
+  // Calculate optimal page size if requested size would exceed 6MB
+  const optimalPageSize = calculateOptimalPageSize(width);
+  const actualPageSize = Math.min(pageSize, optimalPageSize);
+  
+  const totalPages = Math.ceil(height / actualPageSize);
+  const startY = page * actualPageSize;
+  const endY = Math.min(startY + actualPageSize, height);
+  
+  // Validate request
+  if (page < 0 || page >= totalPages) {
+    throw new Error(`Invalid page ${page}. Must be between 0 and ${totalPages - 1}`);
+  }
+  
+  // Generate tiles for this page using the same algorithm as generateMap
+  const tiles: CompactTile[][] = [];
+  
+  for (let y = startY; y < endY; y++) {
+    const row: CompactTile[] = [];
+    for (let x = 0; x < width; x++) {
+      const tile = generateTileAt(x, y, width, height, seedNumber);
+      row.push(tileToCompact(tile));
+    }
+    tiles.push(row);
+  }
+  
+  // Calculate actual payload size
+  const responseJson = JSON.stringify({ tiles });
+  const sizeBytes = Buffer.byteLength(responseJson, 'utf8');
+  
+  return {
+    page,
+    pageSize: actualPageSize,
+    totalPages,
+    seed,
+    startY,
+    endY,
+    tiles,
+    sizeBytes
+  };
+}
+
+/**
+ * Simple hash function to convert string seed to number
+ */
+function hashSeed(seed: string): number {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    const char = seed.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * Validate that a map page request is within reasonable limits
+ */
+export function validateMapPageRequest(request: MapPageRequest): void {
+  const { page, pageSize, seed } = request;
+  
+  if (!seed || (typeof seed === 'string' && seed.length === 0)) {
+    throw new Error('Seed is required');
+  }
+  
+  if (pageSize <= 0 || pageSize > 1000) {
+    throw new Error('Page size must be between 1 and 1000');
+  }
+  
+  if (page < 0) {
+    throw new Error('Page must be non-negative');
+  }
 }

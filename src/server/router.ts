@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { generateMapPage, validateMapPageRequest } from '../map-generator/paginated.js';
+import { generateMapPage, validateMapPageRequest } from '../map-generator/index.js';
 import { MapPageRequest, ApiError } from '../shared/types.js';
 
 const router = Router();

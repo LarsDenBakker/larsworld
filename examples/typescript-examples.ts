@@ -56,7 +56,7 @@ export interface MapPageResponse {
 // =====================================================================
 
 import { NextApiRequest, NextApiResponse } from 'next';
-import { generateMapPage, validateMapPageRequest } from '../map-generator/paginated';
+import { generateMapPage, validateMapPageRequest } from '../map-generator/index';
 import { ApiError } from '../shared/types';
 
 /**

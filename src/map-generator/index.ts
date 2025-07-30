@@ -241,38 +241,19 @@ function generateContinents(width: number, height: number, seed: number): number
   
   // Post-process to achieve target ocean coverage (25-35%, aim for 30%)
   elevationValues.sort((a, b) => a - b);
-  const targetOceanPercent = 0.30; // 30% ocean (middle of 25-35% range)
+  const targetOceanPercent = 0.32; // 32% ocean (within 25-35% range)
   const oceanThresholdIndex = Math.floor(elevationValues.length * targetOceanPercent);
   const dynamicThreshold = elevationValues[oceanThresholdIndex];
   
   // Apply the dynamic threshold to ensure consistent ocean coverage
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      // If elevation is below the dynamic threshold, make it ocean
+      // Simple threshold application without continent reinforcement
       if (landMask[y][x] < dynamicThreshold) {
         landMask[y][x] = 0.1; // Ocean elevation
       } else {
-        // Scale land elevations to be above ocean threshold, with stronger continent centers
-        const originalElevation = landMask[y][x];
-        
-        // Check if near continent center for stronger land influence
-        let nearCenter = false;
-        for (const center of continentCenters) {
-          const dx = (x - center.x) / (width * 0.25);
-          const dy = (y - center.y) / (height * 0.25);
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          if (distance < 0.8) {
-            nearCenter = true;
-            break;
-          }
-        }
-        
-        if (nearCenter) {
-          // Ensure continent cores are always land
-          landMask[y][x] = 0.7 + (originalElevation - dynamicThreshold) / (1 - dynamicThreshold) * 0.3;
-        } else {
-          landMask[y][x] = 0.5 + (originalElevation - dynamicThreshold) / (1 - dynamicThreshold) * 0.5;
-        }
+        // Scale land elevations to be above ocean threshold
+        landMask[y][x] = 0.5 + (landMask[y][x] - dynamicThreshold) / (1 - dynamicThreshold) * 0.5;
       }
     }
   }

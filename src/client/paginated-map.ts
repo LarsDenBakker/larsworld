@@ -4,7 +4,7 @@
  */
 
 // Import shared types (in a real app, these would be imported from a shared package)
-import { MapPageResponse, CompactTile, BIOME_TYPES, compactToTile } from '../shared/types.js';
+import { MapPageResponse, CompactTile, TILE_TYPES, compactToTile } from '../shared/types.js';
 
 interface MapGenerationConfig {
   seed: string;

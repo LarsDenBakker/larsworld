@@ -254,21 +254,34 @@ function generateContinents(width: number, height: number, seed: number): number
   }
   
   // Post-process to achieve target ocean coverage (25-35%, aim for 30%)
-  elevationValues.sort((a, b) => a - b);
-  const targetOceanPercent = 0.32; // 32% ocean (within 25-35% range)
-  const oceanThresholdIndex = Math.floor(elevationValues.length * targetOceanPercent);
-  const dynamicThreshold = elevationValues[oceanThresholdIndex];
+  // Create a list of all elevation values with their coordinates for sorting
+  const allElevations: Array<{value: number, x: number, y: number}> = [];
   
-  // Apply the dynamic threshold to ensure consistent ocean coverage
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      // Simple threshold application without continent reinforcement
-      if (landMask[y][x] < dynamicThreshold) {
-        landMask[y][x] = 0.1; // Ocean elevation
-      } else {
-        // Scale land elevations to be above ocean threshold
-        landMask[y][x] = 0.5 + (landMask[y][x] - dynamicThreshold) / (1 - dynamicThreshold) * 0.5;
-      }
+      allElevations.push({value: landMask[y][x], x, y});
+    }
+  }
+  
+  // Sort by elevation value to determine exact threshold
+  allElevations.sort((a, b) => a.value - b.value);
+  
+  // Target 30% ocean coverage (middle of 25-35% spec range)
+  const targetOceanPercent = 0.30;
+  const oceanTileCount = Math.floor(allElevations.length * targetOceanPercent);
+  
+  // Apply ocean/land classification directly based on sorted order
+  for (let i = 0; i < allElevations.length; i++) {
+    const {x, y} = allElevations[i];
+    
+    if (i < oceanTileCount) {
+      // Bottom 30% = ocean (scale from 0.1 to 0.39 to stay well below 0.5)
+      const oceanPosition = i / (oceanTileCount - 1);
+      landMask[y][x] = 0.1 + oceanPosition * 0.29; // 0.1 to 0.39
+    } else {
+      // Top 70% = land (scale from 0.51 to 1.0 to stay well above 0.5)
+      const landPosition = (i - oceanTileCount) / (allElevations.length - oceanTileCount - 1);
+      landMask[y][x] = 0.51 + landPosition * 0.49; // 0.51 to 1.0
     }
   }
   
@@ -325,7 +338,7 @@ export function generateMap(width: number, height: number, seed?: number): Tile[
       let elevation = landStrength;
       
       // Add detailed terrain elevation using noise for land areas
-      if (landStrength > 0.1) {
+      if (landStrength >= 0.5) {
         const terrainElevation = elevationNoise.octaveNoise(x * 0.01, y * 0.01, 6, 0.5);
         const terrainVariation = (terrainElevation + 1) / 2; // Normalize to 0-1
         
@@ -333,11 +346,12 @@ export function generateMap(width: number, height: number, seed?: number): Tile[
         elevation = landStrength * 0.7 + terrainVariation * landStrength * 0.5;
         
         // Ensure minimum land elevation
-        elevation = Math.max(elevation, 0.31);
+        elevation = Math.max(elevation, 0.51);
       } else {
         // Ocean areas - add seafloor variation
         const seafloorVariation = elevationNoise.octaveNoise(x * 0.005, y * 0.005, 3, 0.3);
-        elevation = 0.1 + Math.max(0, seafloorVariation * 0.1);
+        elevation = landStrength + Math.max(0, seafloorVariation * 0.05); // Smaller variation to stay below 0.5
+        elevation = Math.min(elevation, 0.49); // Ensure it stays below 0.5
       }
       
       // Clamp elevation to valid range
@@ -486,7 +500,7 @@ function calculateDynamicThreshold(width: number, height: number, seed: number):
   
   // Apply the same post-processing logic as generateContinents
   elevationSamples.sort((a, b) => a - b);
-  const targetOceanPercent = 0.32; // Same as in generateContinents
+  const targetOceanPercent = 0.25; // Same as in generateContinents
   const oceanThresholdIndex = Math.floor(elevationSamples.length * targetOceanPercent);
   return elevationSamples[oceanThresholdIndex];
 }

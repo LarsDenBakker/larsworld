@@ -112,17 +112,20 @@ class PerlinNoise {
 /**
  * Determines tile type based on elevation - simplified per specs
  * Specs only mention 'land' and 'ocean' tile types
+ * Uses post-processed elevation values that already ensure proper ocean coverage
  */
 function getTileType(elevation: number): Tile['type'] {
-  // Tuned threshold to achieve 25-35% ocean coverage
-  return elevation < 0.31 ? 'ocean' : 'land';
+  // Post-processed elevations: < 0.5 = ocean, >= 0.5 = land
+  return elevation < 0.5 ? 'ocean' : 'land';
 }
 
 /**
- * Generate 1, 2, or 3 continents based on specs
+ * Generate 1, 2, or 3 continents based on specs using noise-based approach
+ * - Creates irregular, natural-looking landmasses instead of circular shapes
  * - Each continent separated by ocean
  * - Distance between continents at least 5% of total map width
  * - Total ocean coverage 25-35%, rest land
+ * - Uses multi-octave Perlin noise with domain warping for natural coastlines
  */
 function generateContinents(width: number, height: number, seed: number): number[][] {
   const landMask: number[][] = [];
@@ -138,29 +141,28 @@ function generateContinents(width: number, height: number, seed: number): number
   // Determine number of continents (1, 2, or 3)
   const numContinents = Math.floor(random() * 3) + 1;
   
-  // Target land coverage: 65-75% (25-35% ocean per specs)
-  const targetLandCoverage = 0.715 + random() * 0.02; // 71.5-73.5% land = 26.5-28.5% ocean
+  // Create multiple noise generators for different purposes
+  const continentNoise = new PerlinNoise(seed);
+  const detailNoise = new PerlinNoise(seed + 100);
+  const warpNoiseX = new PerlinNoise(seed + 200);
+  const warpNoiseY = new PerlinNoise(seed + 300);
   
-  // Minimum separation: 5% of map width
+  // Generate continent centers ensuring proper separation
+  const continentCenters: Array<{x: number, y: number}> = [];
   const minSeparation = width * 0.05;
   
-  const continents: Array<{x: number, y: number, radiusX: number, radiusY: number}> = [];
-  
-  // Generate continent positions ensuring proper separation
   for (let i = 0; i < numContinents; i++) {
     let attempts = 0;
     let validPosition = false;
-    let continentX = width * 0.5; // Default position
-    let continentY = height * 0.5; // Default position
+    let continentX = width * 0.5;
+    let continentY = height * 0.5;
     
     while (!validPosition && attempts < 100) {
-      // Position continent centers to avoid edges
       continentX = (width * 0.15) + random() * (width * 0.7);
       continentY = (height * 0.15) + random() * (height * 0.7);
       
-      // Check separation from existing continents
       validPosition = true;
-      for (const existing of continents) {
+      for (const existing of continentCenters) {
         const distance = Math.sqrt(
           Math.pow(continentX - existing.x, 2) + 
           Math.pow(continentY - existing.y, 2)
@@ -174,7 +176,7 @@ function generateContinents(width: number, height: number, seed: number): number
     }
     
     if (!validPosition) {
-      // Fallback: place along different axes
+      // Fallback positioning for multiple continents
       if (i === 1) {
         continentX = width * 0.25;
         continentY = height * 0.5;
@@ -184,48 +186,92 @@ function generateContinents(width: number, height: number, seed: number): number
       }
     }
     
-    // Size continents to achieve target land coverage
-    const landPerContinent = targetLandCoverage / numContinents;
-    const continentArea = width * height * landPerContinent * 1.05; // Slight oversize
-    const radius = Math.sqrt(continentArea / Math.PI);
-    
-    const radiusX = radius * (0.88 + random() * 0.12);
-    const radiusY = radius * (0.88 + random() * 0.12);
-    
-    continents.push({
-      x: continentX,
-      y: continentY,
-      radiusX,
-      radiusY
-    });
+    continentCenters.push({ x: continentX, y: continentY });
   }
   
-  // Create noise for continental variation
-  const continentNoise = new PerlinNoise(seed);
+  // Generate elevation values
+  const elevationValues: number[] = [];
   
-  // Generate landmass for each continent
-  for (const continent of continents) {
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        // Calculate distance from continent center
-        const dx = (x - continent.x) / continent.radiusX;
-        const dy = (y - continent.y) / continent.radiusY;
+  // Generate landmass using noise-based approach
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      // Apply domain warping for natural, irregular shapes
+      const warpStrength = 15.0;
+      const warpX = x + warpNoiseX.octaveNoise(x * 0.008, y * 0.008, 3, 0.5) * warpStrength;
+      const warpY = y + warpNoiseY.octaveNoise(x * 0.008, y * 0.008, 3, 0.5) * warpStrength;
+      
+      // Large-scale continent shape (low frequency, high amplitude)
+      const continentShape = continentNoise.octaveNoise(warpX * 0.003, warpY * 0.003, 3, 0.6);
+      
+      // Medium-scale features (moderate frequency and amplitude)
+      const mediumFeatures = continentNoise.octaveNoise(warpX * 0.008, warpY * 0.008, 4, 0.5);
+      
+      // Fine-scale coastal details (high frequency, low amplitude)
+      const coastalDetails = detailNoise.octaveNoise(warpX * 0.02, warpY * 0.02, 3, 0.4);
+      
+      // Combine noise layers for natural landmass shape
+      let elevation = continentShape * 0.6 + mediumFeatures * 0.3 + coastalDetails * 0.1;
+      
+      // Add distance-based influence from continent centers for separation
+      let centerInfluence = 0;
+      for (const center of continentCenters) {
+        const dx = (x - center.x) / (width * 0.3); // Influence area
+        const dy = (y - center.y) / (height * 0.3);
         const distance = Math.sqrt(dx * dx + dy * dy);
         
-        if (distance < 1.15) {
-          // Add noise for realistic coastlines
-          const noiseValue = continentNoise.octaveNoise(x * 0.01, y * 0.01, 4, 0.5);
-          const adjustedDistance = distance + noiseValue * 0.2; // Reduce noise impact
-          
-          if (adjustedDistance < 1.0) {
-            // Core continent
-            const strength = Math.pow(1 - adjustedDistance, 0.7);
-            landMask[y][x] = Math.max(landMask[y][x], strength);
-          } else if (adjustedDistance < 1.15) {
-            // Coastal transition zone
-            const strength = Math.pow((1.15 - adjustedDistance) / 0.15, 1.3) * 0.5;
-            landMask[y][x] = Math.max(landMask[y][x], strength);
+        // Smooth falloff from continent centers
+        const influence = Math.max(0, 1 - Math.pow(distance, 1.8));
+        centerInfluence = Math.max(centerInfluence, influence);
+      }
+      
+      // Ensure we always have some landmass near continent centers
+      const landBoost = centerInfluence * 0.35; // Moderate land boost
+      
+      // Combine noise elevation with center influence
+      elevation = elevation * 0.65 + centerInfluence * 0.18 + landBoost;
+      
+      // Normalize to 0-1 and clamp
+      elevation = (elevation + 1) / 2; // Normalize to 0-1
+      elevation = Math.max(0, Math.min(1, elevation));
+      
+      landMask[y][x] = elevation;
+      elevationValues.push(elevation);
+    }
+  }
+  
+  // Post-process to achieve target ocean coverage (25-35%, aim for 30%)
+  elevationValues.sort((a, b) => a - b);
+  const targetOceanPercent = 0.30; // 30% ocean (middle of 25-35% range)
+  const oceanThresholdIndex = Math.floor(elevationValues.length * targetOceanPercent);
+  const dynamicThreshold = elevationValues[oceanThresholdIndex];
+  
+  // Apply the dynamic threshold to ensure consistent ocean coverage
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      // If elevation is below the dynamic threshold, make it ocean
+      if (landMask[y][x] < dynamicThreshold) {
+        landMask[y][x] = 0.1; // Ocean elevation
+      } else {
+        // Scale land elevations to be above ocean threshold, with stronger continent centers
+        const originalElevation = landMask[y][x];
+        
+        // Check if near continent center for stronger land influence
+        let nearCenter = false;
+        for (const center of continentCenters) {
+          const dx = (x - center.x) / (width * 0.25);
+          const dy = (y - center.y) / (height * 0.25);
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          if (distance < 0.8) {
+            nearCenter = true;
+            break;
           }
+        }
+        
+        if (nearCenter) {
+          // Ensure continent cores are always land
+          landMask[y][x] = 0.7 + (originalElevation - dynamicThreshold) / (1 - dynamicThreshold) * 0.3;
+        } else {
+          landMask[y][x] = 0.5 + (originalElevation - dynamicThreshold) / (1 - dynamicThreshold) * 0.5;
         }
       }
     }

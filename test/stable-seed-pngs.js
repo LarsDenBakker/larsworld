@@ -29,9 +29,9 @@ const STABLE_SEEDS = [
 export async function generateStableSeedPngs() {
   console.log('Generating stable seed PNG images using chunk-based generation...\n');
   
-  // Generate 96x96 maps (6x6 chunks) to test the ocean coverage requirement
-  const chunksPerSide = 6;
-  const mapSize = chunksPerSide * CHUNK_SIZE; // 96x96
+  // Generate 64x64 maps (4x4 chunks) to test the ocean coverage requirement
+  const chunksPerSide = 4;
+  const mapSize = chunksPerSide * CHUNK_SIZE; // 64x64
   const imageDir = path.join(__dirname, 'map-images');
   
   // Ensure directory exists
@@ -168,7 +168,7 @@ ${results.map((r, i) =>
 ## Requirements (from specs)
 
 - Chunk-based generation ✓
-- 25-35% ocean coverage for 96×96+ maps (${report.meetsSpecsCount}/${report.totalMaps} maps meet this)
+- 25-35% ocean coverage for 60×60+ maps (${report.meetsSpecsCount}/${report.totalMaps} maps meet this)
 - Only 'land' and 'ocean' tile types ✓
 - Deterministic generation with seeds ✓
 - 1-3 continents separated by ocean

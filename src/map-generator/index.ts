@@ -264,7 +264,7 @@ function calculateLandStrengthAtChunk(x: number, y: number, seed: number): numbe
   
   // Instead of post-processing like in generateContinents, use a direct threshold
   // that approximately produces 30% ocean coverage based on the noise characteristics
-  // Adjusted threshold to better match 25-35% ocean coverage for 96x96+ areas
+  // Adjusted threshold to better match 25-35% ocean coverage for 60x60+ areas
   const oceanThreshold = 0.495;
   
   if (elevation < oceanThreshold) {

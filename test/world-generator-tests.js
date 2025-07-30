@@ -10,16 +10,16 @@ import { generateStableSeedPngs } from './stable-seed-pngs.js';
 
 
 /**
- * Test ocean coverage is 25-35% for 96×96 maps as specified
- * Only applies to maps 96×96 and larger per updated requirements
+ * Test ocean coverage is 25-35% for 60×60 maps as specified
+ * Only applies to maps 60×60 and larger per updated requirements
  * Note: Chunk-based generation may not achieve exact percentages for all seeds
  * due to its stateless nature, but should be close on average
  */
-function testOceanCoverage96x96() {
+function testOceanCoverage60x60() {
   try {
-    // 96×96 = 6×6 chunks (since each chunk is 16×16)
-    const chunksPerSide = 6;
-    const totalSize = chunksPerSide * CHUNK_SIZE; // Should be 96
+    // 60×60 ≈ 4×4 chunks (since each chunk is 16×16, gives 64×64 tiles)
+    const chunksPerSide = 4;
+    const totalSize = chunksPerSide * CHUNK_SIZE; // Should be 64
     
     const testCases = [
       { seed: 12345 },
@@ -38,7 +38,7 @@ function testOceanCoverage96x96() {
       let oceanCount = 0;
       const totalTiles = totalSize * totalSize;
       
-      // Generate all chunks for a 96×96 area
+      // Generate all chunks for a 64×64 area
       for (let chunkY = 0; chunkY < chunksPerSide; chunkY++) {
         for (let chunkX = 0; chunkX < chunksPerSide; chunkX++) {
           const chunk = generateChunk(chunkX, chunkY, testCase.seed);
@@ -77,7 +77,7 @@ function testOceanCoverage96x96() {
       avgOceanPercentage <= 40;
     
     return {
-      name: 'Ocean Coverage 96×96 (25-35%)',
+      name: 'Ocean Coverage 60×60 (25-35%)',
       passed: meetsChunkBasedExpectations,
       message: meetsChunkBasedExpectations 
         ? `Chunk-based generation shows reasonable ocean coverage (${withinSpecCount}/${testCases.length} within spec, avg ${avgOceanPercentage.toFixed(1)}%)`
@@ -86,7 +86,7 @@ function testOceanCoverage96x96() {
     };
   } catch (error) {
     return {
-      name: 'Ocean Coverage 96×96 (25-35%)',
+      name: 'Ocean Coverage 60×60 (25-35%)',
       passed: false,
       message: `Error: ${error.message}`
     };
@@ -501,7 +501,7 @@ async function runAllTests() {
   const tests = [
     testTileTypes,
     testDeterministicGeneration,
-    testOceanCoverage96x96,
+    testOceanCoverage60x60,
     testMapRealism,
     testChunkBasedGeneration,
     testChunkOceanCoverage,

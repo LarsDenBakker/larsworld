@@ -1,4 +1,4 @@
-import { Tile, BiomeType, CompactTile, tileToCompact, MapPageRequest, MapPageResponse } from '../shared/types.js';
+import { Tile, TileType, CompactTile, tileToCompact, MapPageRequest, MapPageResponse } from '../shared/types.js';
 
 /**
  * Simple hash function to convert string seed to number
@@ -86,53 +86,10 @@ class DeterministicPerlinNoise {
 }
 
 /**
- * Determines biome based on temperature, moisture, and elevation
- * Consistent with the original map generator for proper ocean/land separation
- * Fixed to match thresholds in index.ts to ensure consistent rendering between generators
+ * Determines tile type based on elevation - simplified per specs
  */
-function getBiome(temperature: number, moisture: number, elevation: number): BiomeType {
-  // Ocean and shallow water based on elevation - consistent with original generator
-  if (elevation < 0.25) {
-    return elevation < 0.15 ? 'ocean' : 'shallow_water';
-  }
-  
-  // Beach areas just above water
-  if (elevation < 0.3) {
-    return 'beach';
-  }
-  
-  // Snow-capped mountains
-  if (elevation > 0.85) {
-    return 'snow';
-  }
-  
-  // High mountains
-  if (elevation > 0.75) {
-    return 'mountain';
-  }
-  
-  // Tundra in cold areas
-  if (temperature < 0.25) {
-    return 'tundra';
-  }
-  
-  // Desert in hot, dry areas
-  if (temperature > 0.7 && moisture < 0.4) {
-    return 'desert';
-  }
-  
-  // Swamp in hot, very wet areas with low elevation
-  if (temperature > 0.6 && moisture > 0.8 && elevation < 0.5) {
-    return 'swamp';
-  }
-  
-  // Forest in moderate to high moisture
-  if (moisture > 0.6) {
-    return 'forest';
-  }
-  
-  // Default to grassland
-  return 'grassland';
+function getTileType(elevation: number): TileType {
+  return elevation < 0.25 ? 'ocean' : 'land';
 }
 
 /**
@@ -229,11 +186,11 @@ function generateTileAt(x: number, y: number, seed: string): Tile {
   moisture = (moisture + 1) / 2; // Normalize to 0-1
   moisture = Math.max(0, Math.min(1, moisture)); // Clamp to 0-1
   
-  // Determine biome based on climate and elevation
-  const biome = getBiome(temperature, moisture, elevation);
+  // Determine tile type based on specs (land or ocean)
+  const tileType = getTileType(elevation);
   
   return {
-    type: biome,
+    type: tileType,
     x,
     y,
     elevation,

@@ -1,5 +1,5 @@
 export interface Tile {
-  type: 'ocean' | 'shallow_water' | 'beach' | 'desert' | 'grassland' | 'forest' | 'tundra' | 'mountain' | 'snow' | 'swamp';
+  type: 'land' | 'ocean';
   x: number;
   y: number;
   elevation: number; // 0-1, where 0 is sea level
@@ -110,331 +110,193 @@ class PerlinNoise {
 }
 
 /**
- * Determines biome based on temperature, moisture, and elevation
+ * Determines tile type based on elevation - simplified per specs
+ * Specs only mention 'land' and 'ocean' tile types
  */
-function getBiome(temperature: number, moisture: number, elevation: number): Tile['type'] {
-  // Ocean and shallow water based on elevation - adjusted for better ocean coverage
-  if (elevation < 0.25) {
-    return elevation < 0.15 ? 'ocean' : 'shallow_water';
-  }
-  
-  // Beach areas just above water
-  if (elevation < 0.3) {
-    return 'beach';
-  }
-  
-  // Snow-capped mountains
-  if (elevation > 0.85) {
-    return 'snow';
-  }
-  
-  // High mountains
-  if (elevation > 0.75) {
-    return 'mountain';
-  }
-  
-  // Tundra in cold areas
-  if (temperature < 0.25) {
-    return 'tundra';
-  }
-  
-  // Desert in hot, dry areas
-  if (temperature > 0.7 && moisture < 0.4) {
-    return 'desert';
-  }
-  
-  // Swamp in hot, very wet areas with low elevation
-  if (temperature > 0.6 && moisture > 0.8 && elevation < 0.5) {
-    return 'swamp';
-  }
-  
-  // Forest in moderate to high moisture
-  if (moisture > 0.6) {
-    return 'forest';
-  }
-  
-  // Default to grassland
-  return 'grassland';
+function getTileType(elevation: number): Tile['type'] {
+  // Tuned threshold to achieve 25-35% ocean coverage
+  return elevation < 0.3 ? 'ocean' : 'land';
 }
 
 /**
- * Generate a continent shape using distance fields and noise distortion
- * Creates realistic continental formations inspired by natural geography
+ * Generate 1, 2, or 3 continents based on specs
+ * - Each continent separated by ocean
+ * - Distance between continents at least 5% of total map width
+ * - Total ocean coverage 25-35%, rest land
  */
-function generateContinent(width: number, height: number, noise: PerlinNoise): number[][] {
-  const continent: number[][] = [];
+function generateContinents(width: number, height: number, seed: number): number[][] {
+  const landMask: number[][] = [];
   
-  // Position the continent slightly off-center for more natural look
-  // This simulates viewing a portion of a larger world, not the entire globe
-  const centerX = width * (0.4 + 0.2 * Math.random()); // 40-60% across
-  const centerY = height * (0.45 + 0.1 * Math.random()); // 45-55% down
-  
-  // Continent should cover a significant portion but ensure 20-40% ocean coverage
-  // For smaller maps, use more conservative continent sizing to ensure ocean coverage
-  const isSmallMap = width < 100 || height < 100;
-  const oceanTargetFactor = isSmallMap ? 0.85 : 0.9; // More conservative for small maps
-  
-  const continentRadiusX = width * (0.25 + 0.05 * Math.random()) * oceanTargetFactor;
-  const continentRadiusY = height * (0.22 + 0.04 * Math.random()) * oceanTargetFactor;
-  
+  // Initialize with zeros (ocean)
   for (let y = 0; y < height; y++) {
-    const row: number[] = [];
-    for (let x = 0; x < width; x++) {
-      // Calculate normalized distance from continent center
-      const dx = (x - centerX) / continentRadiusX;
-      const dy = (y - centerY) / continentRadiusY;
-      const distanceFromCenter = Math.sqrt(dx * dx + dy * dy);
-      
-      // Apply layered noise distortion for realistic coastlines
-      // Large-scale coastal features (bays, peninsulas)
-      const largeCoastalNoise = noise.octaveNoise(x * 0.008, y * 0.008, 3, 0.7);
-      // Medium-scale coastal complexity
-      const mediumCoastalNoise = noise.octaveNoise(x * 0.015, y * 0.015, 4, 0.5);
-      // Fine-scale coastal detail
-      const fineCoastalNoise = noise.octaveNoise(x * 0.03, y * 0.03, 3, 0.3);
-      
-      // Combine noise layers for multi-scale coastline realism
-      const noiseFactor = largeCoastalNoise * 0.25 + mediumCoastalNoise * 0.15 + fineCoastalNoise * 0.1;
-      const adjustedDistance = distanceFromCenter + noiseFactor;
-      
-      // Create continent shape with smooth falloff
-      let continentStrength = 0;
-      if (adjustedDistance < 1.2) { // Slightly larger threshold for more land
-        if (adjustedDistance < 1.0) {
-          // Core continent area - strong land presence
-          continentStrength = Math.pow(1 - adjustedDistance, 0.7);
-        } else {
-          // Transition zone - creates peninsulas and coastal complexity
-          const transitionFactor = 1.2 - adjustedDistance;
-          continentStrength = Math.pow(transitionFactor / 0.2, 1.5) * 0.6;
-        }
-      }
-      
-      row.push(continentStrength);
-    }
-    continent.push(row);
+    landMask.push(new Array(width).fill(0));
   }
   
-  return continent;
-}
-
-/**
- * Generate islands scattered around the continent
- * Creates archipelagos and island chains for variety and realism
- */
-function generateIslands(width: number, height: number, continent: number[][], noise: PerlinNoise): number[][] {
-  const islands: number[][] = [];
+  // Create seeded random function
+  const random = seedRandom(seed);
   
-  // Initialize with zeros
-  for (let y = 0; y < height; y++) {
-    islands.push(new Array(width).fill(0));
-  }
+  // Determine number of continents (1, 2, or 3)
+  const numContinents = Math.floor(random() * 3) + 1;
   
-  // Generate several island clusters/archipelagos
-  const numIslandClusters = 4 + Math.floor(Math.random() * 3); // 4-6 clusters
+  // Target land coverage: 65-75% (25-35% ocean per specs)
+  const targetLandCoverage = 0.72 + random() * 0.03; // 72-75% land = 25-28% ocean
   
-  for (let cluster = 0; cluster < numIslandClusters; cluster++) {
-    // Find good location for islands - prefer areas with some distance from continent
-    let islandX, islandY, attempts = 0;
-    let bestScore = -1;
-    let bestX = 0, bestY = 0;
+  // Minimum separation: 5% of map width
+  const minSeparation = width * 0.05;
+  
+  const continents: Array<{x: number, y: number, radiusX: number, radiusY: number}> = [];
+  
+  // Generate continent positions ensuring proper separation
+  for (let i = 0; i < numContinents; i++) {
+    let attempts = 0;
+    let validPosition = false;
+    let continentX = width * 0.5; // Default position
+    let continentY = height * 0.5; // Default position
     
-    // Try multiple locations and pick the best one
-    while (attempts < 30) {
-      const candidateX = Math.random() * width;
-      const candidateY = Math.random() * height;
-      const continentStrength = continent[Math.floor(candidateY)][Math.floor(candidateX)];
+    while (!validPosition && attempts < 100) {
+      // Position continent centers to avoid edges
+      continentX = (width * 0.15) + random() * (width * 0.7);
+      continentY = (height * 0.15) + random() * (height * 0.7);
       
-      // Prefer locations with moderate distance from continent (not too close, not too far)
-      let score = 0;
-      if (continentStrength < 0.1) {
-        // Good - in ocean but not too far from continent
-        score = 0.8;
-        
-        // Bonus for being near (but not on) continent edges
-        const nearbyLand = checkNearbyLand(continent, candidateX, candidateY, 80);
-        if (nearbyLand > 0 && nearbyLand < 0.3) {
-          score += 0.5; // Islands near continental shelves
+      // Check separation from existing continents
+      validPosition = true;
+      for (const existing of continents) {
+        const distance = Math.sqrt(
+          Math.pow(continentX - existing.x, 2) + 
+          Math.pow(continentY - existing.y, 2)
+        );
+        if (distance < minSeparation) {
+          validPosition = false;
+          break;
         }
-      } else if (continentStrength < 0.3) {
-        // Acceptable - coastal waters
-        score = 0.4;
       }
-      
-      // Avoid map edges
-      const edgeDistance = Math.min(candidateX, candidateY, width - candidateX, height - candidateY);
-      if (edgeDistance < 50) {
-        score *= 0.3;
-      }
-      
-      if (score > bestScore) {
-        bestScore = score;
-        bestX = candidateX;
-        bestY = candidateY;
-      }
-      
       attempts++;
     }
     
-    islandX = bestX;
-    islandY = bestY;
-    
-    // Create island cluster/archipelago
-    const clusterRadius = 60 + Math.random() * 80; // Variable cluster size
-    const numIslands = 2 + Math.floor(Math.random() * 4); // 2-5 islands per cluster
-    
-    for (let island = 0; island < numIslands; island++) {
-      // Position island within cluster - sometimes create island chains
-      let ix, iy;
-      if (island === 0) {
-        // First island at cluster center
-        ix = islandX;
-        iy = islandY;
-      } else {
-        // Subsequent islands can form chains or be scattered
-        if (Math.random() < 0.6) {
-          // Chain formation - extend from previous islands
-          const chainAngle = Math.random() * Math.PI * 2;
-          const chainDistance = 30 + Math.random() * 50;
-          ix = islandX + Math.cos(chainAngle) * chainDistance * island * 0.7;
-          iy = islandY + Math.sin(chainAngle) * chainDistance * island * 0.7;
-        } else {
-          // Scattered formation
-          const angle = Math.random() * Math.PI * 2;
-          const distance = Math.random() * clusterRadius;
-          ix = islandX + Math.cos(angle) * distance;
-          iy = islandY + Math.sin(angle) * distance;
-        }
+    if (!validPosition) {
+      // Fallback: place along different axes
+      if (i === 1) {
+        continentX = width * 0.25;
+        continentY = height * 0.5;
+      } else if (i === 2) {
+        continentX = width * 0.75;
+        continentY = height * 0.5;
       }
-      
-      // Skip if island would be outside map or on existing land
-      if (ix < 0 || ix >= width || iy < 0 || iy >= height) continue;
-      if (continent[Math.floor(iy)][Math.floor(ix)] > 0.4) continue;
-      
-      // Island size varies based on position in cluster
-      const baseRadius = island === 0 ? 25 + Math.random() * 25 : 15 + Math.random() * 20;
-      const islandRadius = baseRadius;
-      
-      // Generate island shape with realistic coastlines
-      for (let y = Math.max(0, Math.floor(iy - islandRadius)); y < Math.min(height, Math.ceil(iy + islandRadius)); y++) {
-        for (let x = Math.max(0, Math.floor(ix - islandRadius)); x < Math.min(width, Math.ceil(ix + islandRadius)); x++) {
-          const dx = x - ix;
-          const dy = y - iy;
-          const distanceFromIslandCenter = Math.sqrt(dx * dx + dy * dy);
+    }
+    
+    // Size continents to achieve target land coverage
+    const landPerContinent = targetLandCoverage / numContinents;
+    const continentArea = width * height * landPerContinent * 1.1; // Slightly oversize to account for falloff
+    const radius = Math.sqrt(continentArea / Math.PI);
+    
+    const radiusX = radius * (0.9 + random() * 0.2);
+    const radiusY = radius * (0.9 + random() * 0.2);
+    
+    continents.push({
+      x: continentX,
+      y: continentY,
+      radiusX,
+      radiusY
+    });
+  }
+  
+  // Create noise for continental variation
+  const continentNoise = new PerlinNoise(seed);
+  
+  // Generate landmass for each continent
+  for (const continent of continents) {
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        // Calculate distance from continent center
+        const dx = (x - continent.x) / continent.radiusX;
+        const dy = (y - continent.y) / continent.radiusY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance < 1.2) {
+          // Add noise for realistic coastlines
+          const noiseValue = continentNoise.octaveNoise(x * 0.01, y * 0.01, 4, 0.5);
+          const adjustedDistance = distance + noiseValue * 0.25;
           
-          if (distanceFromIslandCenter < islandRadius) {
-            // Apply noise for irregular island shape
-            const islandShapeNoise = noise.octaveNoise(x * 0.04, y * 0.04, 3, 0.6);
-            const islandDetailNoise = noise.octaveNoise(x * 0.08, y * 0.08, 2, 0.3);
-            const totalNoise = islandShapeNoise * 8 + islandDetailNoise * 4;
-            
-            const adjustedDistance = distanceFromIslandCenter + totalNoise;
-            
-            if (adjustedDistance < islandRadius) {
-              const islandStrength = Math.pow(1 - adjustedDistance / islandRadius, 1.1);
-              // Islands are generally lower elevation than main continent
-              const maxStrength = 0.7 + Math.random() * 0.2;
-              islands[y][x] = Math.max(islands[y][x], islandStrength * maxStrength);
-            }
+          if (adjustedDistance < 1.0) {
+            // Core continent
+            const strength = Math.pow(1 - adjustedDistance, 0.75);
+            landMask[y][x] = Math.max(landMask[y][x], strength);
+          } else if (adjustedDistance < 1.2) {
+            // Coastal transition zone
+            const strength = Math.pow((1.2 - adjustedDistance) / 0.2, 1.4) * 0.6;
+            landMask[y][x] = Math.max(landMask[y][x], strength);
           }
         }
       }
     }
   }
   
-  return islands;
+  return landMask;
 }
 
 /**
- * Check for nearby land within a given radius
+ * Create seeded random function
  */
-function checkNearbyLand(continent: number[][], x: number, y: number, radius: number): number {
-  let landSum = 0;
-  let count = 0;
-  const intX = Math.floor(x);
-  const intY = Math.floor(y);
+function seedRandom(seed: number): () => number {
+  let m = 0x80000000; // 2**31
+  let a = 1103515245;
+  let c = 12345;
+  seed = seed % m;
   
-  for (let dy = -radius; dy <= radius; dy += 10) {
-    for (let dx = -radius; dx <= radius; dx += 10) {
-      const checkX = intX + dx;
-      const checkY = intY + dy;
-      
-      if (checkX >= 0 && checkX < continent[0].length && checkY >= 0 && checkY < continent.length) {
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance <= radius) {
-          landSum += continent[checkY][checkX];
-          count++;
-        }
-      }
-    }
+  return function() {
+    seed = (a * seed + c) % m;
+    return seed / (m - 1);
+  };
+}
+
+/**
+ * Generates a realistic square map with 1, 2, or 3 continents
+ * - Maps are always square
+ * - Contains 1, 2, or 3 continents separated by ocean
+ * - Distance between continents at least 5% of total map width  
+ * - 25-35% ocean coverage, rest land
+ * - Deterministic based on seed
+ */
+export function generateMap(width: number, height: number, seed?: number): Tile[][] {
+  // Ensure square maps as per specs
+  if (width !== height) {
+    throw new Error('Maps must be square according to specs');
   }
   
-  return count > 0 ? landSum / count : 0;
-}
-
-/**
- * Generates a realistic 2D map featuring one large continent with scattered islands
- * Ocean coverage is approximately 20-40% of the map
- */
-export function generateMap(width: number, height: number): Tile[][] {
   const map: Tile[][] = [];
+  const mapSeed = seed ?? Math.floor(Math.random() * 1000000);
   
   // Initialize noise generators with different seeds for variety
-  const continentNoise = new PerlinNoise(Math.random());
-  const islandNoise = new PerlinNoise(Math.random());
-  const elevationNoise = new PerlinNoise(Math.random());
-  const temperatureNoise = new PerlinNoise(Math.random());
-  const moistureNoise = new PerlinNoise(Math.random());
+  const elevationNoise = new PerlinNoise(mapSeed + 1);
+  const temperatureNoise = new PerlinNoise(mapSeed + 2);
+  const moistureNoise = new PerlinNoise(mapSeed + 3);
   
-  // Generate the main continent
-  const continent = generateContinent(width, height, continentNoise);
-  
-  // Generate islands around the continent
-  const islands = generateIslands(width, height, continent, islandNoise);
-  
-  // Force ocean boundaries on all edges for map consistency
-  const oceanBorderWidth = Math.min(Math.max(3, Math.min(width, height) * 0.05), 8);
+  // Generate continents according to specs
+  const landMask = generateContinents(width, height, mapSeed);
   
   for (let y = 0; y < height; y++) {
     const row: Tile[] = [];
     for (let x = 0; x < width; x++) {
-      // Calculate distance from nearest edge
-      const distanceFromEdge = Math.min(x, y, width - 1 - x, height - 1 - y);
-      
-      // Combine continent and island contributions
-      const landStrength = Math.max(continent[y][x], islands[y][x]);
+      // Get land strength from continent generation
+      const landStrength = landMask[y][x];
       
       // Base elevation from land strength
       let elevation = landStrength;
       
-      // Add detailed terrain elevation using noise
+      // Add detailed terrain elevation using noise for land areas
       if (landStrength > 0.1) {
-        // Land areas - add terrain variation
         const terrainElevation = elevationNoise.octaveNoise(x * 0.01, y * 0.01, 6, 0.5);
         const terrainVariation = (terrainElevation + 1) / 2; // Normalize to 0-1
         
         // Combine base land shape with terrain details
         elevation = landStrength * 0.7 + terrainVariation * landStrength * 0.5;
         
-        // Add mountain ranges in the interior of large landmasses
-        if (landStrength > 0.6) {
-          const ridgeNoise = Math.abs(elevationNoise.octaveNoise(x * 0.02, y * 0.02, 4, 0.4));
-          elevation += ridgeNoise * landStrength * 0.4;
-        }
-        
         // Ensure minimum land elevation
-        elevation = Math.max(elevation, 0.25 + landStrength * 0.1);
+        elevation = Math.max(elevation, 0.3);
       } else {
         // Ocean areas - add seafloor variation
         const seafloorVariation = elevationNoise.octaveNoise(x * 0.005, y * 0.005, 3, 0.3);
         elevation = 0.1 + Math.max(0, seafloorVariation * 0.1);
-      }
-      
-      // Force ocean boundaries for map edges
-      if (distanceFromEdge < oceanBorderWidth) {
-        const edgeFactor = distanceFromEdge / oceanBorderWidth;
-        const forcedOceanElevation = 0.05;
-        elevation = Math.min(elevation, forcedOceanElevation + elevation * edgeFactor * 0.3);
       }
       
       // Clamp elevation to valid range
@@ -450,19 +312,13 @@ export function generateMap(width: number, height: number): Tile[][] {
       // Generate moisture patterns
       let moisture = moistureNoise.octaveNoise(x * 0.012, y * 0.012, 4, 0.4);
       moisture = (moisture + 1) / 2; // Normalize to 0-1
-      
-      // Add coastal moisture effects
-      if (landStrength > 0.1 && landStrength < 0.7) {
-        moisture += 0.2; // Coastal areas are more humid
-      }
-      
       moisture = Math.max(0, Math.min(1, moisture));
       
-      // Determine biome based on climate and elevation
-      const biome = getBiome(temperature, moisture, elevation);
+      // Determine tile type based on specs (land or ocean)
+      const tileType = getTileType(elevation);
       
       row.push({
-        type: biome,
+        type: tileType,
         x,
         y,
         elevation,

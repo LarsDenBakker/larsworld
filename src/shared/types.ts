@@ -2,38 +2,30 @@
  * Shared types between server and client for map generation API
  */
 
-// Biome types as compact numeric indices instead of verbose strings
-export const BIOME_TYPES = [
+// Tile types as per specs - only land and ocean
+export const TILE_TYPES = [
   'ocean',
-  'shallow_water', 
-  'beach',
-  'desert',
-  'grassland',
-  'forest',
-  'tundra',
-  'mountain',
-  'snow',
-  'swamp'
+  'land'
 ] as const;
 
-export type BiomeType = typeof BIOME_TYPES[number];
-export type BiomeIndex = number; // 0-9 index into BIOME_TYPES array
+export type TileType = typeof TILE_TYPES[number];
+export type TileIndex = number; // 0-1 index into TILE_TYPES array
 
 // Compact tile representation for API responses
 export interface CompactTile {
-  /** Biome type index (0-9) */
-  b: BiomeIndex;
+  /** Tile type index (0-1) */
+  t: TileIndex;
   /** Elevation (0-255, scaled from 0-1) */
   e: number;
   /** Temperature (0-255, scaled from 0-1) */
-  t: number;
+  tmp: number;
   /** Moisture (0-255, scaled from 0-1) */
   m: number;
 }
 
 // Full tile representation used internally
 export interface Tile {
-  type: BiomeType;
+  type: TileType;
   x: number;
   y: number;
   elevation: number; // 0-1, where 0 is sea level
@@ -70,15 +62,15 @@ export interface ApiError {
  * Convert a full Tile to compact representation
  */
 export function tileToCompact(tile: Tile): CompactTile {
-  const biomeIndex = BIOME_TYPES.indexOf(tile.type);
-  if (biomeIndex === -1) {
-    throw new Error(`Unknown biome type: ${tile.type}`);
+  const tileIndex = TILE_TYPES.indexOf(tile.type);
+  if (tileIndex === -1) {
+    throw new Error(`Unknown tile type: ${tile.type}`);
   }
   
   return {
-    b: biomeIndex,
+    t: tileIndex,
     e: Math.round(tile.elevation * 255),
-    t: Math.round(tile.temperature * 255),
+    tmp: Math.round(tile.temperature * 255),
     m: Math.round(tile.moisture * 255)
   };
 }
@@ -88,11 +80,11 @@ export function tileToCompact(tile: Tile): CompactTile {
  */
 export function compactToTile(compact: CompactTile, x: number, y: number): Tile {
   return {
-    type: BIOME_TYPES[compact.b],
+    type: TILE_TYPES[compact.t],
     x,
     y,
     elevation: compact.e / 255,
-    temperature: compact.t / 255,
+    temperature: compact.tmp / 255,
     moisture: compact.m / 255
   };
 }

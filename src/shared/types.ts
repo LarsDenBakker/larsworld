@@ -64,14 +64,14 @@ export interface Tile {
   elevationType: ElevationType; // Calculated elevation category
 }
 
-// API request parameters for paginated map generation
+// API request parameters for paginated map generation (legacy)
 export interface MapPageRequest {
   page: number;
   pageSize: number;
   seed: string;
 }
 
-// API response for a single page of map data
+// API response for a single page of map data (legacy)
 export interface MapPageResponse {
   page: number;
   pageSize: number;
@@ -79,6 +79,25 @@ export interface MapPageResponse {
   seed: string;
   startY: number;
   endY: number;
+  tiles: CompactTile[][];
+  sizeBytes: number;
+}
+
+// Chunk size constant - each chunk is 16x16 tiles
+export const CHUNK_SIZE = 16;
+
+// API request parameters for chunk-based map generation
+export interface MapChunkRequest {
+  chunkX: number;
+  chunkY: number;
+  seed: string;
+}
+
+// API response for a single chunk of map data
+export interface MapChunkResponse {
+  chunkX: number;
+  chunkY: number;
+  seed: string;
   tiles: CompactTile[][];
   sizeBytes: number;
 }

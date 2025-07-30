@@ -115,7 +115,7 @@ class PerlinNoise {
  */
 function getTileType(elevation: number): Tile['type'] {
   // Tuned threshold to achieve 25-35% ocean coverage
-  return elevation < 0.3 ? 'ocean' : 'land';
+  return elevation < 0.31 ? 'ocean' : 'land';
 }
 
 /**
@@ -139,7 +139,7 @@ function generateContinents(width: number, height: number, seed: number): number
   const numContinents = Math.floor(random() * 3) + 1;
   
   // Target land coverage: 65-75% (25-35% ocean per specs)
-  const targetLandCoverage = 0.72 + random() * 0.03; // 72-75% land = 25-28% ocean
+  const targetLandCoverage = 0.715 + random() * 0.02; // 71.5-73.5% land = 26.5-28.5% ocean
   
   // Minimum separation: 5% of map width
   const minSeparation = width * 0.05;
@@ -186,11 +186,11 @@ function generateContinents(width: number, height: number, seed: number): number
     
     // Size continents to achieve target land coverage
     const landPerContinent = targetLandCoverage / numContinents;
-    const continentArea = width * height * landPerContinent * 1.1; // Slightly oversize to account for falloff
+    const continentArea = width * height * landPerContinent * 1.05; // Slight oversize
     const radius = Math.sqrt(continentArea / Math.PI);
     
-    const radiusX = radius * (0.9 + random() * 0.2);
-    const radiusY = radius * (0.9 + random() * 0.2);
+    const radiusX = radius * (0.88 + random() * 0.12);
+    const radiusY = radius * (0.88 + random() * 0.12);
     
     continents.push({
       x: continentX,
@@ -212,18 +212,18 @@ function generateContinents(width: number, height: number, seed: number): number
         const dy = (y - continent.y) / continent.radiusY;
         const distance = Math.sqrt(dx * dx + dy * dy);
         
-        if (distance < 1.2) {
+        if (distance < 1.15) {
           // Add noise for realistic coastlines
           const noiseValue = continentNoise.octaveNoise(x * 0.01, y * 0.01, 4, 0.5);
-          const adjustedDistance = distance + noiseValue * 0.25;
+          const adjustedDistance = distance + noiseValue * 0.2; // Reduce noise impact
           
           if (adjustedDistance < 1.0) {
             // Core continent
-            const strength = Math.pow(1 - adjustedDistance, 0.75);
+            const strength = Math.pow(1 - adjustedDistance, 0.7);
             landMask[y][x] = Math.max(landMask[y][x], strength);
-          } else if (adjustedDistance < 1.2) {
+          } else if (adjustedDistance < 1.15) {
             // Coastal transition zone
-            const strength = Math.pow((1.2 - adjustedDistance) / 0.2, 1.4) * 0.6;
+            const strength = Math.pow((1.15 - adjustedDistance) / 0.15, 1.3) * 0.5;
             landMask[y][x] = Math.max(landMask[y][x], strength);
           }
         }
@@ -292,7 +292,7 @@ export function generateMap(width: number, height: number, seed?: number): Tile[
         elevation = landStrength * 0.7 + terrainVariation * landStrength * 0.5;
         
         // Ensure minimum land elevation
-        elevation = Math.max(elevation, 0.3);
+        elevation = Math.max(elevation, 0.31);
       } else {
         // Ocean areas - add seafloor variation
         const seafloorVariation = elevationNoise.octaveNoise(x * 0.005, y * 0.005, 3, 0.3);

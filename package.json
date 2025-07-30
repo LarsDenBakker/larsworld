@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node --loader ts-node/esm src/server/local.ts",
     "build": "tsc",
-    "test": "npm run test:e2e",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "node test/world-generator-tests.js",
+    "test:generate-pngs": "node test/stable-seed-pngs.js",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:preview": "node scripts/test-e2e-preview.js",

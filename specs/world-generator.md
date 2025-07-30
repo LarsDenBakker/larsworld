@@ -3,6 +3,7 @@
 - Maps should always be square.
 - Maps should be realistic, the algorithm complete and extensive.
 - 3rd party libraries may be used for better implementation.
+- The generator should support generating the map in 1 call, as well as in batched chunks to optimize rendering in the frontend.
 
 # Continents
 - The world generator should generate world maps containing 1, 2 or 3 continents.

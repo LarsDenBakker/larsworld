@@ -32,6 +32,9 @@ jobs:
     - name: Build project
       run: npm run build
 
+    - name: Verify stable seed PNG images
+      run: npm run test:verify-pngs
+
     - name: Run Playwright tests
       run: npm run test:e2e
       env:

@@ -3,6 +3,7 @@
  * Tests only the requirements specified in specs/world-generator.md
  */
 import { generateMap } from '../dist/src/map-generator/index.js';
+import { generateStableSeedPngs } from './stable-seed-pngs.js';
 
 /**
  * Test that maps are always square as required by specs
@@ -287,9 +288,31 @@ function testMapRealism() {
 }
 
 /**
+ * Test stable seed PNG generation
+ */
+async function testStableSeedPngs() {
+  try {
+    console.log('Generating stable seed PNG images...');
+    await generateStableSeedPngs();
+    
+    return {
+      name: 'Stable Seed PNG Generation',
+      passed: true,
+      message: 'Successfully generated PNG images for all stable seeds'
+    };
+  } catch (error) {
+    return {
+      name: 'Stable Seed PNG Generation',
+      passed: false,
+      message: `Error generating stable seed PNGs: ${error.message}`
+    };
+  }
+}
+
+/**
  * Run all unit tests
  */
-function runAllTests() {
+async function runAllTests() {
   console.log('Running World Generator Unit Tests (Based on Specs)...\n');
   
   const tests = [
@@ -297,14 +320,15 @@ function runAllTests() {
     testTileTypes,
     testDeterministicGeneration,
     testOceanCoverage,
-    testMapRealism
+    testMapRealism,
+    testStableSeedPngs
   ];
   
   const results = [];
   let passed = 0;
   
   for (const test of tests) {
-    const result = test();
+    const result = await test();
     results.push(result);
     
     console.log(`${result.passed ? '✓' : '✗'} ${result.name}: ${result.message}`);
@@ -324,5 +348,5 @@ function runAllTests() {
 
 // If run directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  runAllTests();
+  runAllTests().catch(console.error);
 }

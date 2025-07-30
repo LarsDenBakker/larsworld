@@ -7,8 +7,8 @@ These images should be updated whenever the world generator algorithm changes.
 
 - **Map Size**: 200x200 tiles
 - **Image Size**: 400x400 pixels (2x2 pixels per tile)
-- **Generated**: 2025-07-30T11:25:02.957Z
-- **Maps Meeting Specs**: 1/10
+- **Generated**: 2025-07-30T12:11:55.800Z
+- **Maps Meeting Specs**: 0/10
 
 ## Files
 
@@ -18,21 +18,21 @@ Each seed generates two images:
 
 ## Stable Seeds
 
-1. **Seed 12345**: Ocean 52.1%, Land 47.9% ✗
-2. **Seed 54321**: Ocean 51.0%, Land 49.0% ✗
-3. **Seed 98765**: Ocean 55.7%, Land 44.3% ✗
-4. **Seed 11111**: Ocean 51.4%, Land 48.6% ✗
-5. **Seed 77777**: Ocean 41.2%, Land 58.8% ✗
-6. **Seed 42424**: Ocean 53.5%, Land 46.5% ✗
-7. **Seed 13579**: Ocean 50.9%, Land 49.1% ✗
-8. **Seed 24680**: Ocean 30.7%, Land 69.3% ✓
-9. **Seed 31415**: Ocean 35.0%, Land 65.0% ✗
-10. **Seed 27182**: Ocean 42.8%, Land 57.2% ✗
+1. **Seed 12345**: Ocean 43.8%, Land 56.2% ✗
+2. **Seed 54321**: Ocean 51.7%, Land 48.3% ✗
+3. **Seed 98765**: Ocean 43.8%, Land 56.2% ✗
+4. **Seed 11111**: Ocean 59.2%, Land 40.8% ✗
+5. **Seed 77777**: Ocean 47.5%, Land 52.5% ✗
+6. **Seed 42424**: Ocean 56.5%, Land 43.5% ✗
+7. **Seed 13579**: Ocean 39.3%, Land 60.7% ✗
+8. **Seed 24680**: Ocean 73.3%, Land 26.7% ✗
+9. **Seed 31415**: Ocean 64.4%, Land 35.6% ✗
+10. **Seed 27182**: Ocean 45.0%, Land 55.0% ✗
 
 ## Requirements (from specs)
 
 - Maps must be square ✓
-- 25-35% ocean coverage (1/10 maps meet this)
+- 25-35% ocean coverage (0/10 maps meet this)
 - Only 'land' and 'ocean' tile types ✓
 - Deterministic generation with seeds ✓
 - 1-3 continents separated by ocean

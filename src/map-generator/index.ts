@@ -315,7 +315,7 @@ function getRiverSystemData(seed: number): RiverSystemData {
 }
 
 /**
- * Generate a single river path from a source to ocean/lake
+ * Generate a single river path from a source to ocean/lake with varied lengths
  */
 function generateRiverPath(startX: number, startY: number, seed: number, riverPaths: Map<string, RiverType>, lakes: Set<string>, random: () => number): void {
   const visited = new Set<string>();
@@ -323,8 +323,33 @@ function generateRiverPath(startX: number, startY: number, seed: number, riverPa
   let currentY = startY;
   const path: Array<{x: number, y: number, flow: {dx: number, dy: number}}> = [];
   
+  // Determine river type and maximum length based on source characteristics
+  const sourceElevation = calculateLandStrengthAtChunk(startX, startY, seed);
+  const sourceRandom = seedRandom(seed + startX * 2001 + startY * 3001)();
+  
+  let maxLength: number;
+  let riverType: string;
+  
+  if (sourceElevation > 0.75 && sourceRandom < 0.3) {
+    // Major continental rivers - very long
+    maxLength = 800 + Math.floor(random() * 600); // 800-1400 steps
+    riverType = 'continental';
+  } else if (sourceElevation > 0.65 && sourceRandom < 0.6) {
+    // Long regional rivers
+    maxLength = 400 + Math.floor(random() * 400); // 400-800 steps  
+    riverType = 'regional';
+  } else if (sourceRandom < 0.7) {
+    // Medium rivers
+    maxLength = 150 + Math.floor(random() * 250); // 150-400 steps
+    riverType = 'medium';
+  } else {
+    // Short mountain streams
+    maxLength = 50 + Math.floor(random() * 150); // 50-200 steps
+    riverType = 'stream';
+  }
+  
   // Follow elevation gradients to create river path
-  for (let step = 0; step < 300; step++) { // Increased from 200 to make rivers longer
+  for (let step = 0; step < maxLength; step++) {
     const key = `${currentX},${currentY}`;
     
     // Stop if we've been here before (loop prevention)
@@ -343,7 +368,9 @@ function generateRiverPath(startX: number, startY: number, seed: number, riverPa
     if (flowDirection.dx === 0 && flowDirection.dy === 0) {
       // Create a lake at this dead end if the river is long enough
       if (path.length > 15) {
-        const lakeSize = 3 + Math.floor(random() * 6); // Lake radius 3-8 for river endpoints
+        const lakeSize = riverType === 'continental' ? 5 + Math.floor(random() * 8) : // 5-12 for major rivers
+                        riverType === 'regional' ? 4 + Math.floor(random() * 6) :     // 4-9 for regional
+                        3 + Math.floor(random() * 4);                                 // 3-6 for others
         createLake(currentX, currentY, lakes, lakeSize, seed);
       }
       break;
@@ -353,8 +380,14 @@ function generateRiverPath(startX: number, startY: number, seed: number, riverPa
     path.push({ x: currentX, y: currentY, flow: flowDirection });
     
     // Random chance to create a lake midway through longer rivers
-    if (path.length > 20 && path.length % 30 === 0 && random() < 0.3) {
-      const lakeSize = 2 + Math.floor(random() * 4); // Smaller midway lakes, radius 2-5
+    const midwayLakeChance = riverType === 'continental' ? 0.4 :
+                           riverType === 'regional' ? 0.3 :
+                           riverType === 'medium' ? 0.2 : 0.1;
+    
+    if (path.length > 30 && path.length % 50 === 0 && random() < midwayLakeChance) {
+      const lakeSize = riverType === 'continental' ? 3 + Math.floor(random() * 5) : // 3-7 for major
+                      riverType === 'regional' ? 2 + Math.floor(random() * 4) :     // 2-5 for regional  
+                      2 + Math.floor(random() * 3);                                 // 2-4 for others
       createLake(currentX, currentY, lakes, lakeSize, seed);
     }
     
@@ -364,11 +397,18 @@ function generateRiverPath(startX: number, startY: number, seed: number, riverPa
   }
   
   // Create a lake at the river mouth if it doesn't reach ocean and is long enough
+  const mouthLakeChance = riverType === 'continental' ? 0.6 :
+                         riverType === 'regional' ? 0.5 :
+                         riverType === 'medium' ? 0.4 : 0.2;
+  
   if (path.length > 25) {
     const lastSegment = path[path.length - 1];
     const finalElevation = calculateLandStrengthAtChunk(lastSegment.x, lastSegment.y, seed);
-    if (finalElevation >= 0.5 && random() < 0.4) { // 40% chance of lake at river mouth
-      const lakeSize = 4 + Math.floor(random() * 8); // Larger mouth lakes, radius 4-11
+    if (finalElevation >= 0.5 && random() < mouthLakeChance) {
+      const lakeSize = riverType === 'continental' ? 6 + Math.floor(random() * 10) : // 6-15 for major
+                      riverType === 'regional' ? 4 + Math.floor(random() * 8) :      // 4-11 for regional
+                      riverType === 'medium' ? 3 + Math.floor(random() * 6) :        // 3-8 for medium
+                      2 + Math.floor(random() * 4);                                  // 2-5 for streams
       createLake(lastSegment.x, lastSegment.y, lakes, lakeSize, seed);
     }
   }
@@ -476,25 +516,28 @@ function generateRiverPath(startX: number, startY: number, seed: number, riverPa
 }
 
 /**
- * Create an irregular lake at the specified location with given approximate radius
- * Lakes follow elevation patterns and have natural, non-circular shapes
+ * Create highly irregular lake at the specified location with given approximate radius
+ * Lakes follow elevation patterns and have dramatic, non-circular shapes with complex shorelines
  */
 function createLake(centerX: number, centerY: number, lakes: Set<string>, baseRadius: number, seed: number = 12345): void {
-  // Create more varied lake sizes
-  const minRadius = Math.max(1, Math.floor(baseRadius * 0.7));
-  const maxRadius = Math.floor(baseRadius * 1.5 + 2);
+  // Create more varied lake sizes with greater extremes
+  const minRadius = Math.max(1, Math.floor(baseRadius * 0.5));
+  const maxRadius = Math.floor(baseRadius * 2.0 + 3);
   const actualRadius = minRadius + Math.floor(seedRandom(seed + centerX * 1000 + centerY)() * (maxRadius - minRadius + 1));
   
-  // Use noise to create irregular shoreline
+  // Use multiple noise layers for complex irregular shorelines
   const lakeNoise = new PerlinNoise(seed + centerX * 313 + centerY * 619);
   const shorelineNoise = new PerlinNoise(seed + centerX * 97 + centerY * 241);
+  const detailNoise = new PerlinNoise(seed + centerX * 167 + centerY * 419);
+  const complexityNoise = new PerlinNoise(seed + centerX * 73 + centerY * 139);
   
   // Get center elevation for reference
   const centerElevation = calculateLandStrengthAtChunk(centerX, centerY, seed);
   
-  // Create irregular lake boundary
-  for (let dy = -maxRadius - 2; dy <= maxRadius + 2; dy++) {
-    for (let dx = -maxRadius - 2; dx <= maxRadius + 2; dx++) {
+  // Create highly irregular lake boundary with fractal-like complexity
+  const scanRadius = maxRadius + 4;
+  for (let dy = -scanRadius; dy <= scanRadius; dy++) {
+    for (let dx = -scanRadius; dx <= scanRadius; dx++) {
       const x = centerX + dx;
       const y = centerY + dy;
       const elevation = calculateLandStrengthAtChunk(x, y, seed);
@@ -504,22 +547,43 @@ function createLake(centerX: number, centerY: number, lakes: Set<string>, baseRa
       
       const distance = Math.sqrt(dx * dx + dy * dy);
       
-      // Base lake boundary with irregular edge
-      const noiseScale = 0.3; // Controls how jagged the shoreline is
-      const shorelineVariation = shorelineNoise.noise(x * noiseScale, y * noiseScale) * 0.7;
-      const irregularRadius = actualRadius + shorelineVariation * actualRadius * 0.4;
+      // Create complex, highly irregular shoreline using multiple noise layers
+      const angle = Math.atan2(dy, dx);
       
-      // Additional elevation-based inclusion - prefer lower areas
+      // Primary shoreline variation (large-scale irregularity)
+      const primaryScale = 0.15; // Lower frequency for larger features
+      const primaryVariation = shorelineNoise.noise(x * primaryScale, y * primaryScale) * 1.2;
+      
+      // Secondary detail (medium-scale features like inlets and peninsulas)
+      const detailScale = 0.4; // Higher frequency for smaller features
+      const detailVariation = detailNoise.noise(x * detailScale, y * detailScale) * 0.8;
+      
+      // Fine complexity (small-scale jaggedness)
+      const complexityScale = 0.8; // Very high frequency for fine detail
+      const complexityVariation = complexityNoise.noise(x * complexityScale, y * complexityScale) * 0.4;
+      
+      // Radial variation based on angle for organic shape stretching
+      const radialVariation = Math.sin(angle * 3.7) * 0.3 + Math.cos(angle * 2.1) * 0.2;
+      
+      // Combine all variations for highly irregular boundary
+      const totalVariation = primaryVariation + detailVariation + complexityVariation + radialVariation;
+      const irregularRadius = actualRadius + totalVariation * actualRadius * 0.6;
+      
+      // Strong elevation-based inclusion - creates natural basins
       const elevationDiff = centerElevation - elevation;
-      const elevationBonus = elevationDiff > 0 ? elevationDiff * 2 : 0; // Prefer lower elevations
+      const elevationBonus = elevationDiff > 0 ? elevationDiff * 3.5 : -Math.abs(elevationDiff) * 1.5;
       
-      // Lake formation preference based on terrain
-      const terrainSuitability = lakeNoise.noise(x * 0.1, y * 0.1) * 0.5 + 0.5;
-      const finalRadius = irregularRadius + elevationBonus + (terrainSuitability - 0.5);
+      // Terrain suitability with higher variation
+      const terrainSuitability = lakeNoise.octaveNoise(x * 0.08, y * 0.08, 3, 0.6);
+      const terrainBonus = terrainSuitability * 2.0;
       
-      if (distance <= finalRadius && distance <= maxRadius + 1) {
-        // Additional check to prevent lakes from being too large or extending into ocean
-        if (elevation >= 0.5 && elevation <= 0.8) { // Sweet spot for lake formation
+      // Final radius calculation with all factors
+      const finalRadius = irregularRadius + elevationBonus + terrainBonus;
+      
+      // More permissive distance check to allow for very irregular shapes
+      if (distance <= finalRadius && distance <= maxRadius + 2) {
+        // Elevation sweet spot for lake formation with some tolerance for dramatic shapes
+        if (elevation >= 0.5 && elevation <= 0.85) {
           lakes.add(`${x},${y}`);
         }
       }

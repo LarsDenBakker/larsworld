@@ -61,13 +61,38 @@
   position: absolute;
   bottom: 20px;
   right: 20px;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.95);
   padding: 8px 16px;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
   color: #374151;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  transition: all 0.3s ease;
+}
+
+/* Rendering progress animation */
+.progress-info::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6, #3b82f6);
+  background-size: 200% 100%;
+  animation: progressShimmer 2s ease-in-out infinite;
+}
+
+@keyframes progressShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 
 /* Mobile responsiveness */
@@ -110,6 +135,12 @@
   
   /* Optimize rendering */
   contain: layout style paint;
+}
+
+/* Disable animations during rendering for better performance */
+.dom-world-map.rendering .world-tile {
+  animation: none !important;
+  transition: none !important;
 }
 
 .world-tile {

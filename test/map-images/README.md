@@ -7,7 +7,7 @@ These images should be updated whenever the world generator algorithm changes.
 
 - **Map Size**: 960x960 tiles (60x60 chunks)
 - **Image Size**: 1920x1920 pixels (2x2 pixels per tile)
-- **Generated**: 2025-07-31T14:58:06.679Z
+- **Generated**: 2025-07-31T15:18:15.598Z
 - **Maps Meeting Specs**: 4/10
 
 ## Files
@@ -17,16 +17,16 @@ Each seed generates one image:
 
 ## Stable Seeds
 
-1. **Seed 12345**: Ocean 30.3%, Land 69.7% ✓
-2. **Seed 54321**: Ocean 28.8%, Land 71.2% ✓
-3. **Seed 98765**: Ocean 11.3%, Land 88.7% ✗
-4. **Seed 11111**: Ocean 30.6%, Land 69.4% ✓
-5. **Seed 77777**: Ocean 21.5%, Land 78.5% ✗
-6. **Seed 42424**: Ocean 36.2%, Land 63.8% ✗
-7. **Seed 13579**: Ocean 16.5%, Land 83.5% ✗
-8. **Seed 24680**: Ocean 43.3%, Land 56.7% ✗
-9. **Seed 31415**: Ocean 29.9%, Land 70.1% ✓
-10. **Seed 27182**: Ocean 17.2%, Land 82.8% ✗
+1. **Seed 12345**: Ocean 29.4%, Land 70.6% ✓
+2. **Seed 54321**: Ocean 28.2%, Land 71.8% ✓
+3. **Seed 98765**: Ocean 10.8%, Land 89.2% ✗
+4. **Seed 11111**: Ocean 30.2%, Land 69.8% ✓
+5. **Seed 77777**: Ocean 21.6%, Land 78.4% ✗
+6. **Seed 42424**: Ocean 35.1%, Land 64.9% ✗
+7. **Seed 13579**: Ocean 15.9%, Land 84.1% ✗
+8. **Seed 24680**: Ocean 41.1%, Land 58.9% ✗
+9. **Seed 31415**: Ocean 29.4%, Land 70.6% ✓
+10. **Seed 27182**: Ocean 17.0%, Land 83.0% ✗
 
 ## Requirements (from specs)
 

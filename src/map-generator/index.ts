@@ -160,34 +160,8 @@ function seedRandom(seed: number): () => number {
 
 
 /**
- * River noise generators cache
- */
-interface RiverNoiseGenerators {
-  source: PerlinNoise;
-  drainage: PerlinNoise;
-}
-
-const riverNoiseCache = new Map<number, RiverNoiseGenerators>();
-
-/**
- * Get or create cached river noise generators for a seed
- */
-function getRiverNoiseGenerators(seed: number): RiverNoiseGenerators {
-  if (riverNoiseCache.has(seed)) {
-    return riverNoiseCache.get(seed)!;
-  }
-  
-  const noiseGenerators: RiverNoiseGenerators = {
-    source: new PerlinNoise(seed + 1000),
-    drainage: new PerlinNoise(seed + 2000)
-  };
-  
-  riverNoiseCache.set(seed, noiseGenerators);
-  return noiseGenerators;
-}
-
-/**
- * Calculate the flow direction based on elevation gradients (optimized)
+ * Calculate the flow direction based on elevation gradients (simplified)
+ * Returns the direction water would flow from this tile
  */
 function calculateFlowDirection(x: number, y: number, seed: number): { dx: number, dy: number } {
   // Sample elevation at neighboring tiles (simplified to 4 cardinal directions)
@@ -218,35 +192,41 @@ function calculateFlowDirection(x: number, y: number, seed: number): { dx: numbe
 }
 
 /**
- * Determine if a location should be a river source (optimized)
+ * Determine if a location should be a river source (simplified)
+ * River sources are placed at high elevation areas
  */
-function isRiverSource(x: number, y: number, seed: number, elevation: number, riverNoise: RiverNoiseGenerators): boolean {
+function isRiverSource(x: number, y: number, seed: number): boolean {
+  const elevation = calculateLandStrengthAtChunk(x, y, seed);
+  
   // Only land tiles can be river sources
   if (elevation < 0.5) return false;
   
-  // Adjust threshold to actual land elevation range (0.51-1.0)
-  if (elevation < 0.52) return false; // Only use higher land areas
+  // Use noise to determine river source placement
+  const sourceNoise = new PerlinNoise(seed + 1000);
+  const sourceValue = sourceNoise.octaveNoise(x * 0.01, y * 0.01, 2, 0.5);
   
-  // Use cached noise generator
-  const sourceValue = riverNoise.source.noise(x * 0.02, y * 0.02);
+  // River sources are found in higher elevation areas
+  const heightFactor = Math.max(0, (elevation - 0.5) * 2); // Scale to 0-1
+  const threshold = 0.4 - heightFactor * 0.3; // Lower threshold at higher elevations
   
-  // More balanced source placement 
-  return sourceValue > 0.3;
+  return sourceValue > threshold;
 }
 
 /**
- * Calculate simplified flow accumulation using cached noise (optimized)
+ * Calculate simplified flow accumulation using noise
  */
-function calculateFlowAccumulation(x: number, y: number, riverNoise: RiverNoiseGenerators): number {
-  // Use cached noise to simulate drainage patterns, but make it sparser
-  const drainageValue = riverNoise.drainage.octaveNoise(x * 0.02, y * 0.02, 2, 0.5);
+function calculateFlowAccumulation(x: number, y: number, seed: number): number {
+  const drainageNoise = new PerlinNoise(seed + 2000);
+  
+  // Use noise to simulate drainage patterns, but make it sparser
+  const drainageValue = drainageNoise.octaveNoise(x * 0.02, y * 0.02, 2, 0.5);
   
   // Convert to positive values and scale down for less dense rivers
   return (drainageValue + 1) * 1.5;
 }
 
 /**
- * Determine the river segment type (optimized)
+ * Determine the river segment type (simplified)
  */
 function calculateRiverType(x: number, y: number, seed: number): RiverType {
   const elevation = calculateLandStrengthAtChunk(x, y, seed);
@@ -254,11 +234,8 @@ function calculateRiverType(x: number, y: number, seed: number): RiverType {
   // No rivers in ocean
   if (elevation < 0.5) return 'none';
   
-  // Use cached river noise generators
-  const riverNoise = getRiverNoiseGenerators(seed);
-  
-  const flowAccumulation = calculateFlowAccumulation(x, y, riverNoise);
-  const isSource = isRiverSource(x, y, seed, elevation, riverNoise);
+  const flowAccumulation = calculateFlowAccumulation(x, y, seed);
+  const isSource = isRiverSource(x, y, seed);
   
   // Balanced threshold for river presence
   const riverThreshold = isSource ? 1.2 : 2.0;
@@ -398,14 +375,14 @@ function calculateLandStrengthAtChunk(x: number, y: number, seed: number): numbe
   const warpX = x + noiseGenerators.warpX.octaveNoise(x * 0.008, y * 0.008, 3, 0.5) * warpStrength;
   const warpY = y + noiseGenerators.warpY.octaveNoise(x * 0.008, y * 0.008, 3, 0.5) * warpStrength;
   
-  // Large-scale continent shape (reduced octaves from 3 to 2 for performance)
-  const continentShape = noiseGenerators.continent.octaveNoise(warpX * 0.003, warpY * 0.003, 2, 0.6);
+  // Large-scale continent shape (low frequency, high amplitude)
+  const continentShape = noiseGenerators.continent.octaveNoise(warpX * 0.003, warpY * 0.003, 3, 0.6);
   
-  // Medium-scale features (reduced octaves from 4 to 3)
-  const mediumFeatures = noiseGenerators.continent.octaveNoise(warpX * 0.008, warpY * 0.008, 3, 0.5);
+  // Medium-scale features (moderate frequency and amplitude)
+  const mediumFeatures = noiseGenerators.continent.octaveNoise(warpX * 0.008, warpY * 0.008, 4, 0.5);
   
-  // Fine-scale coastal details (reduced octaves from 3 to 2)
-  const coastalDetails = noiseGenerators.detail.octaveNoise(warpX * 0.02, warpY * 0.02, 2, 0.4);
+  // Fine-scale coastal details (high frequency, low amplitude)
+  const coastalDetails = noiseGenerators.detail.octaveNoise(warpX * 0.02, warpY * 0.02, 3, 0.4);
   
   // Combine noise layers for natural landmass shape
   let elevation = continentShape * 0.6 + mediumFeatures * 0.3 + coastalDetails * 0.1;
@@ -488,9 +465,9 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
   // Apply the same elevation calculation as generateMap
   let elevation = landStrength;
   
-  // Add detailed terrain elevation using noise for land areas (reduced octaves for performance)
+  // Add detailed terrain elevation using noise for land areas
   if (landStrength >= 0.5) {
-    const terrainElevation = noiseGenerators.elevation.octaveNoise(x * 0.01, y * 0.01, 4, 0.5); // Reduced from 6 to 4 octaves
+    const terrainElevation = noiseGenerators.elevation.octaveNoise(x * 0.01, y * 0.01, 6, 0.5);
     const terrainVariation = (terrainElevation + 1) / 2; // Normalize to 0-1
     
     // Combine base land shape with terrain details
@@ -499,8 +476,8 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
     // Ensure minimum land elevation
     elevation = Math.max(elevation, 0.51);
   } else {
-    // Ocean areas - add seafloor variation (reduced octaves)
-    const seafloorVariation = noiseGenerators.elevation.octaveNoise(x * 0.005, y * 0.005, 2, 0.3); // Reduced from 3 to 2 octaves
+    // Ocean areas - add seafloor variation
+    const seafloorVariation = noiseGenerators.elevation.octaveNoise(x * 0.005, y * 0.005, 3, 0.3);
     elevation = landStrength + Math.max(0, seafloorVariation * 0.05);
     elevation = Math.min(elevation, 0.49);
   }
@@ -508,16 +485,16 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
   // Clamp elevation to valid range
   elevation = Math.max(0, Math.min(1, elevation));
   
-  // Generate temperature based on latitude (reduced octaves for performance)
+  // Generate temperature based on latitude (using a reference for consistent patterns)
   const referenceHeight = 1000;
   const latitudeFactor = Math.abs((y / referenceHeight) - 0.5) * 2; // 0 at equator, 1 at poles
   let temperature = 1 - latitudeFactor; // Hot at equator, cold at poles
-  temperature += noiseGenerators.temperature.octaveNoise(x * 0.008, y * 0.008, 2, 0.3) * 0.3; // Reduced from 3 to 2 octaves
+  temperature += noiseGenerators.temperature.octaveNoise(x * 0.008, y * 0.008, 3, 0.3) * 0.3;
   temperature -= elevation * 0.5; // Higher elevation = colder
   temperature = Math.max(0, Math.min(1, temperature));
   
-  // Generate moisture patterns (reduced octaves for performance)
-  let moisture = noiseGenerators.moisture.octaveNoise(x * 0.012, y * 0.012, 3, 0.4); // Reduced from 4 to 3 octaves
+  // Generate moisture patterns (same as generateMap)
+  let moisture = noiseGenerators.moisture.octaveNoise(x * 0.012, y * 0.012, 4, 0.4);
   moisture = (moisture + 1) / 2; // Normalize to 0-1
   moisture = Math.max(0, Math.min(1, moisture));
   
@@ -528,7 +505,7 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
   const biome = classifyBiome(elevation, temperature, moisture);
   const elevationType = getElevationType(elevation);
   
-  // Generate river information (optimized)
+  // Generate river information
   const river = calculateRiverType(x, y, seed);
   
   return {
@@ -550,17 +527,15 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
 export function clearGenerationCaches(): void {
   continentCache.clear();
   tileNoiseCache.clear();
-  riverNoiseCache.clear();
 }
 
 /**
  * Get cache statistics for debugging
  */
-export function getCacheStats(): { continents: number, tileNoise: number, riverNoise: number } {
+export function getCacheStats(): { continents: number, tileNoise: number } {
   return {
     continents: continentCache.size,
-    tileNoise: tileNoiseCache.size,
-    riverNoise: riverNoiseCache.size
+    tileNoise: tileNoiseCache.size
   };
 }
 

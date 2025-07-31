@@ -123,6 +123,19 @@ export interface MapChunkResponse {
   sizeBytes: number;
 }
 
+// API request parameters for batch chunk generation
+export interface MapBatchChunkRequest {
+  chunks: Array<{ chunkX: number; chunkY: number }>;
+  seed: string;
+}
+
+// API response for batch chunk data
+export interface MapBatchChunkResponse {
+  chunks: MapChunkResponse[];
+  totalSizeBytes: number;
+  seed: string;
+}
+
 // Error response format
 export interface ApiError {
   error: string;

@@ -22,9 +22,21 @@ export default {
         
         try {
           let body = undefined;
-          if (method !== 'GET' && ctx.request.body) {
-            // Get the request body for non-GET requests
-            body = JSON.stringify(ctx.request.body);
+          if (method !== 'GET') {
+            // Read the raw request body
+            const rawBody = await new Promise((resolve) => {
+              let data = '';
+              ctx.req.on('data', chunk => {
+                data += chunk;
+              });
+              ctx.req.on('end', () => {
+                resolve(data);
+              });
+            });
+            
+            if (rawBody.length > 0) {
+              body = rawBody;
+            }
           }
 
           const response = await fetch(apiUrl, {

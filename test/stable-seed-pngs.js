@@ -29,6 +29,7 @@ const STABLE_SEEDS = [
 
 /**
  * Generate a river-only PNG for debugging river flow patterns
+ * Shows rivers as actual flowing lines, not full-tile coloring
  */
 async function generateRiverOnlyPng(map, mapSize, filepath) {
   const cellSize = 2; // 2x2 pixels per tile to match main images
@@ -38,17 +39,15 @@ async function generateRiverOnlyPng(map, mapSize, filepath) {
   // Create RGBA buffer
   const buffer = Buffer.alloc(imageWidth * imageHeight * 4);
   
+  // First pass: Fill background colors
   for (let y = 0; y < mapSize; y++) {
     for (let x = 0; x < mapSize; x++) {
       const tile = map[y][x];
-      let color = [255, 255, 255, 255]; // Default white (land with no river)
+      let color = [255, 255, 255, 255]; // Default white (land)
       
       if (tile.type === 'ocean') {
         // Light blue for ocean to show coastlines
         color = [173, 216, 230, 255];
-      } else if (tile.river !== 'none') {
-        // Bright blue for rivers to make them clearly visible
-        color = [0, 100, 255, 255];
       }
       
       // Fill pixels for this tile
@@ -67,6 +66,19 @@ async function generateRiverOnlyPng(map, mapSize, filepath) {
     }
   }
   
+  // Second pass: Draw river segments as lines
+  const riverColor = [0, 100, 255, 255]; // Bright blue for rivers
+  
+  for (let y = 0; y < mapSize; y++) {
+    for (let x = 0; x < mapSize; x++) {
+      const tile = map[y][x];
+      
+      if (tile.river !== 'none') {
+        drawRiverSegment(buffer, x, y, tile.river, cellSize, imageWidth, riverColor);
+      }
+    }
+  }
+  
   // Create PNG using Sharp
   const pngBuffer = await sharp(buffer, {
     raw: {
@@ -79,6 +91,129 @@ async function generateRiverOnlyPng(map, mapSize, filepath) {
   // Save the image
   const fs = await import('fs/promises');
   await fs.writeFile(filepath, pngBuffer);
+}
+
+/**
+ * Draw a river segment based on its type
+ * Rivers appear as lines flowing through tiles, not full tile coloring
+ */
+function drawRiverSegment(buffer, tileX, tileY, riverType, cellSize, imageWidth, color) {
+  const startX = tileX * cellSize;
+  const startY = tileY * cellSize;
+  
+  // Helper function to set pixel color
+  function setPixel(px, py, color) {
+    if (px >= 0 && px < imageWidth/1 && py >= 0) {
+      const pixelIndex = (py * imageWidth + px) * 4;
+      if (pixelIndex >= 0 && pixelIndex < buffer.length - 3) {
+        buffer[pixelIndex] = color[0];     // R
+        buffer[pixelIndex + 1] = color[1]; // G
+        buffer[pixelIndex + 2] = color[2]; // B
+        buffer[pixelIndex + 3] = color[3]; // A
+      }
+    }
+  }
+  
+  // Helper function to draw a line between two points
+  function drawLine(x1, y1, x2, y2) {
+    const dx = Math.abs(x2 - x1);
+    const dy = Math.abs(y2 - y1);
+    const sx = x1 < x2 ? 1 : -1;
+    const sy = y1 < y2 ? 1 : -1;
+    let err = dx - dy;
+    
+    let x = x1, y = y1;
+    while (true) {
+      setPixel(x, y, color);
+      
+      if (x === x2 && y === y2) break;
+      
+      const e2 = 2 * err;
+      if (e2 > -dy) {
+        err -= dy;
+        x += sx;
+      }
+      if (e2 < dx) {
+        err += dx;
+        y += sy;
+      }
+    }
+  }
+  
+  // Calculate center and edge points for the tile
+  const centerX = startX + cellSize / 2;
+  const centerY = startY + cellSize / 2;
+  const topY = startY;
+  const bottomY = startY + cellSize - 1;
+  const leftX = startX;
+  const rightX = startX + cellSize - 1;
+  
+  // Draw river segment based on type
+  switch (riverType) {
+    case 'horizontal':
+      // Horizontal line from left edge to right edge
+      drawLine(leftX, centerY, rightX, centerY);
+      break;
+      
+    case 'vertical':
+      // Vertical line from top edge to bottom edge
+      drawLine(centerX, topY, centerX, bottomY);
+      break;
+      
+    case 'bend_ne':
+      // Bend from north to east: top center to right center
+      drawLine(centerX, topY, centerX, centerY);
+      drawLine(centerX, centerY, rightX, centerY);
+      break;
+      
+    case 'bend_nw':
+      // Bend from north to west: top center to left center
+      drawLine(centerX, topY, centerX, centerY);
+      drawLine(centerX, centerY, leftX, centerY);
+      break;
+      
+    case 'bend_se':
+      // Bend from south to east: bottom center to right center
+      drawLine(centerX, bottomY, centerX, centerY);
+      drawLine(centerX, centerY, rightX, centerY);
+      break;
+      
+    case 'bend_sw':
+      // Bend from south to west: bottom center to left center
+      drawLine(centerX, bottomY, centerX, centerY);
+      drawLine(centerX, centerY, leftX, centerY);
+      break;
+      
+    case 'bend_en':
+      // Bend from east to north: right center to top center
+      drawLine(rightX, centerY, centerX, centerY);
+      drawLine(centerX, centerY, centerX, topY);
+      break;
+      
+    case 'bend_es':
+      // Bend from east to south: right center to bottom center
+      drawLine(rightX, centerY, centerX, centerY);
+      drawLine(centerX, centerY, centerX, bottomY);
+      break;
+      
+    case 'bend_wn':
+      // Bend from west to north: left center to top center
+      drawLine(leftX, centerY, centerX, centerY);
+      drawLine(centerX, centerY, centerX, topY);
+      break;
+      
+    case 'bend_ws':
+      // Bend from west to south: left center to bottom center
+      drawLine(leftX, centerY, centerX, centerY);
+      drawLine(centerX, centerY, centerX, bottomY);
+      break;
+      
+    default:
+      // For unknown types, draw a simple cross to indicate presence
+      drawLine(leftX, centerY, rightX, centerY);
+      drawLine(centerX, topY, centerX, bottomY);
+      break;
+  }
 }
 
 export async function generateStableSeedPngs() {

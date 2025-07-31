@@ -1,6 +1,6 @@
 [build]
   command = "npm run build"
-  publish = "web/"
+  publish = "dist/web/"
   functions = "netlify/functions/"
 
 # Function configuration to handle large payloads

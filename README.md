@@ -14,6 +14,36 @@ npm start
 
 The application will be available at `http://localhost:3000`.
 
+### Build Process
+
+The project uses a two-step build process:
+
+1. **Server Build**: TypeScript compilation of server-side code to `dist/`
+2. **Web Build**: Rollup bundling of client-side TypeScript/Lit components to `dist/web/`
+
+```bash
+# Build everything (server + web)
+npm run build
+
+# Build just the server
+npm run build:server
+
+# Build just the web client
+npm run build:web
+```
+
+### Development Server
+
+For development, use the development server which provides hot-reloading:
+
+```bash
+# Start both backend API and frontend dev server
+npm run dev
+
+# Start just the frontend dev server (requires backend running separately)
+npm run dev:web
+```
+
 ### Testing
 
 This project includes comprehensive end-to-end (E2E) testing using Playwright.
@@ -44,4 +74,5 @@ See [E2E_TESTING.md](E2E_TESTING.md) for detailed testing documentation, includi
 - **World Generation**: Generate procedural 1000×1000 earthlike worlds with realistic continental patterns
 - **Interactive Map**: Canvas-based rendering with real-time generation progress
 - **Paginated API**: Efficient map loading through pagination system respecting 6MB limits
+- **Production Build**: Rollup-based bundling for optimized deployment
 - **Netlify Deployment**: Serverless functions for scalable API hosting

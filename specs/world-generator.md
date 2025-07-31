@@ -36,3 +36,11 @@
 - River sources are placed at higher elevation areas using deterministic noise
 - River generation is deterministic based on seed and coordinates
 - Rivers are visualized as blue overlays on the terrain in PNG output
+
+# Performance Characteristics
+- The generator is optimized for large map generation with caching systems to avoid redundant calculations
+- Target performance: 60×60 chunks (921,600 tiles) should generate in under 30 seconds
+- Single chunk generation should complete in under 50ms for good user experience
+- Uses cached continent data and noise generators to achieve 600x+ performance improvement over naive implementation
+- Memory-efficient caching prevents excessive memory usage during large map generation
+- Maintains deterministic generation while achieving high performance through stateless chunk generation

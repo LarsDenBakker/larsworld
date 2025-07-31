@@ -8,6 +8,7 @@ export interface Tile {
   biome: BiomeType; // Calculated biome based on elevation, temperature, moisture
   elevationType: ElevationType; // Calculated elevation category
   river: RiverType; // River segment type at this tile
+  lake: boolean; // Whether this tile contains a lake
 }
 
 // Import shared types for paginated generation
@@ -222,6 +223,8 @@ function calculateFlowDirection(x: number, y: number, seed: number): { dx: numbe
 interface RiverSystemData {
   riverSources: Array<{x: number, y: number}>;
   riverPaths: Map<string, RiverType>; // "x,y" -> RiverType
+  lakes: Set<string>; // "x,y" for lake locations
+  standaloneLakes: Array<{x: number, y: number, radius: number}>; // Standalone lakes not connected to rivers
 }
 
 const riverSystemCache = new Map<number, RiverSystemData>();
@@ -236,6 +239,8 @@ function getRiverSystemData(seed: number): RiverSystemData {
   
   const riverSources: Array<{x: number, y: number}> = [];
   const riverPaths = new Map<string, RiverType>();
+  const lakes = new Set<string>();
+  const standaloneLakes: Array<{x: number, y: number, radius: number}> = [];
   
   // Generate river sources with proper spacing
   const random = seedRandom(seed + 9999);
@@ -246,24 +251,24 @@ function getRiverSystemData(seed: number): RiverSystemData {
   const refHeight = 5000;
   const refOffsetX = -2500; // Center the reference area around origin
   const refOffsetY = -2500;
-  const minSourceSpacing = 80; // Minimum 80 tiles between major river sources
+  const minSourceSpacing = 60; // Reduced from 80 to increase river frequency
   
   // Scan for potential river sources in high-elevation areas
   const potentialSources: Array<{x: number, y: number, suitability: number}> = [];
   
-  for (let y = refOffsetY; y < refOffsetY + refHeight; y += 15) { // Sample every 15 tiles for performance
-    for (let x = refOffsetX; x < refOffsetX + refWidth; x += 15) {
+  for (let y = refOffsetY; y < refOffsetY + refHeight; y += 12) { // Reduced from 15 to increase density
+    for (let x = refOffsetX; x < refOffsetX + refWidth; x += 12) {
       const elevation = calculateLandStrengthAtChunk(x, y, seed);
       
       // Only consider land tiles at higher elevations
-      if (elevation < 0.54) continue; // Need to be in upper ~20% of elevations (since max is ~0.58)
+      if (elevation < 0.52) continue; // Lowered threshold from 0.54 to increase sources
       
       // Calculate suitability based on elevation and local terrain
       const relativeElevation = (elevation - 0.5) / 0.5; // 0-1 within land range
       const sourceNoise = riverNoise.source.octaveNoise(x * 0.006, y * 0.006, 3, 0.6);
       const suitability = relativeElevation * 0.7 + (sourceNoise + 1) * 0.15;
       
-      if (suitability > 0.5) { // Lower suitability threshold to get more sources
+      if (suitability > 0.4) { // Lower suitability threshold to get more sources
         potentialSources.push({ x, y, suitability });
       }
     }
@@ -285,19 +290,24 @@ function getRiverSystemData(seed: number): RiverSystemData {
       }
     }
     
-    if (!tooClose && riverSources.length < 40) { // Allow more rivers in the larger area
+    if (!tooClose && riverSources.length < 60) { // Increased from 40 to allow more rivers
       riverSources.push({ x: candidate.x, y: candidate.y });
     }
   }
   
-  // Generate river paths from each source
+  // Generate river paths from each source with lake endpoints
   for (const source of riverSources) {
-    generateRiverPath(source.x, source.y, seed, riverPaths);
+    generateRiverPath(source.x, source.y, seed, riverPaths, lakes, random);
   }
+  
+  // Generate standalone lakes not connected to rivers
+  generateStandaloneLakes(seed, refWidth, refHeight, refOffsetX, refOffsetY, standaloneLakes, riverPaths, random);
   
   const systemData: RiverSystemData = {
     riverSources,
-    riverPaths
+    riverPaths,
+    lakes,
+    standaloneLakes
   };
   
   riverSystemCache.set(seed, systemData);
@@ -307,14 +317,14 @@ function getRiverSystemData(seed: number): RiverSystemData {
 /**
  * Generate a single river path from a source to ocean/lake
  */
-function generateRiverPath(startX: number, startY: number, seed: number, riverPaths: Map<string, RiverType>): void {
+function generateRiverPath(startX: number, startY: number, seed: number, riverPaths: Map<string, RiverType>, lakes: Set<string>, random: () => number): void {
   const visited = new Set<string>();
   let currentX = startX;
   let currentY = startY;
   const path: Array<{x: number, y: number, flow: {dx: number, dy: number}}> = [];
   
   // Follow elevation gradients to create river path
-  for (let step = 0; step < 200; step++) { // Limit path length to prevent infinite loops
+  for (let step = 0; step < 300; step++) { // Increased from 200 to make rivers longer
     const key = `${currentX},${currentY}`;
     
     // Stop if we've been here before (loop prevention)
@@ -330,14 +340,34 @@ function generateRiverPath(startX: number, startY: number, seed: number, riverPa
     const flowDirection = calculateFlowDirection(currentX, currentY, seed);
     
     // Stop if no clear flow direction (local minimum)
-    if (flowDirection.dx === 0 && flowDirection.dy === 0) break;
+    if (flowDirection.dx === 0 && flowDirection.dy === 0) {
+      // Create a lake at this dead end if the river is long enough
+      if (path.length > 15) {
+        createLake(currentX, currentY, lakes, 2 + Math.floor(random() * 3), seed); // Lake radius 2-4
+      }
+      break;
+    }
     
     // Record this segment
     path.push({ x: currentX, y: currentY, flow: flowDirection });
     
+    // Random chance to create a lake midway through longer rivers
+    if (path.length > 20 && path.length % 30 === 0 && random() < 0.3) {
+      createLake(currentX, currentY, lakes, 1 + Math.floor(random() * 2), seed); // Smaller midway lakes
+    }
+    
     // Move to next position
     currentX += flowDirection.dx;
     currentY += flowDirection.dy;
+  }
+  
+  // Create a lake at the river mouth if it doesn't reach ocean and is long enough
+  if (path.length > 25) {
+    const lastSegment = path[path.length - 1];
+    const finalElevation = calculateLandStrengthAtChunk(lastSegment.x, lastSegment.y, seed);
+    if (finalElevation >= 0.5 && random() < 0.4) { // 40% chance of lake at river mouth
+      createLake(lastSegment.x, lastSegment.y, lakes, 3 + Math.floor(random() * 3), seed); // Larger mouth lakes
+    }
   }
   
   // Convert path to river segments
@@ -373,6 +403,83 @@ function generateRiverPath(startX: number, startY: number, seed: number, riverPa
 }
 
 /**
+ * Create a lake at the specified location with given radius
+ */
+function createLake(centerX: number, centerY: number, lakes: Set<string>, radius: number, seed: number = 12345): void {
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance <= radius) {
+        const x = centerX + dx;
+        const y = centerY + dy;
+        const elevation = calculateLandStrengthAtChunk(x, y, seed);
+        
+        // Only create lakes on land areas
+        if (elevation >= 0.5) {
+          lakes.add(`${x},${y}`);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Generate standalone lakes not connected to rivers
+ */
+function generateStandaloneLakes(seed: number, refWidth: number, refHeight: number, refOffsetX: number, refOffsetY: number, 
+                                standaloneLakes: Array<{x: number, y: number, radius: number}>, 
+                                riverPaths: Map<string, RiverType>, random: () => number): void {
+  const lakeNoise = new PerlinNoise(seed + 8000);
+  
+  // Generate fewer but well-spaced standalone lakes
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const x = refOffsetX + Math.floor(random() * refWidth);
+    const y = refOffsetY + Math.floor(random() * refHeight);
+    const elevation = calculateLandStrengthAtChunk(x, y, seed);
+    
+    // Only place lakes on suitable land areas
+    if (elevation < 0.5 || elevation > 0.65) continue;
+    
+    // Check distance from existing rivers and lakes
+    let tooCloseToRiver = false;
+    const checkRadius = 20;
+    for (let dy = -checkRadius; dy <= checkRadius; dy++) {
+      for (let dx = -checkRadius; dx <= checkRadius; dx++) {
+        const checkKey = `${x + dx},${y + dy}`;
+        if (riverPaths.has(checkKey)) {
+          tooCloseToRiver = true;
+          break;
+        }
+      }
+      if (tooCloseToRiver) break;
+    }
+    
+    if (tooCloseToRiver) continue;
+    
+    // Check distance from other lakes
+    let tooCloseToLake = false;
+    for (const existingLake of standaloneLakes) {
+      const dx = x - existingLake.x;
+      const dy = y - existingLake.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance < 40) {
+        tooCloseToLake = true;
+        break;
+      }
+    }
+    
+    if (tooCloseToLake) continue;
+    
+    // Use noise to determine lake suitability
+    const lakeNoiseval = lakeNoise.octaveNoise(x * 0.01, y * 0.01, 3, 0.5);
+    if (lakeNoiseval > 0.2) {
+      const radius = 2 + Math.floor(random() * 4); // Radius 2-5
+      standaloneLakes.push({ x, y, radius });
+    }
+  }
+}
+
+/**
  * Determine if a location should be a river source
  * Now uses the cached river system data
  */
@@ -403,6 +510,35 @@ function calculateFlowAccumulation(x: number, y: number, seed: number): number {
   }
   
   return 0.0; // No accumulation for non-river tiles
+}
+
+/**
+ * Determine if a location is a lake
+ */
+function isLake(x: number, y: number, seed: number): boolean {
+  const riverSystem = getRiverSystemData(seed);
+  
+  // Check if this location is a lake from the river system
+  const key = `${x},${y}`;
+  if (riverSystem.lakes.has(key)) {
+    return true;
+  }
+  
+  // Check if this location is part of a standalone lake
+  for (const lake of riverSystem.standaloneLakes) {
+    const dx = x - lake.x;
+    const dy = y - lake.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance <= lake.radius) {
+      const elevation = calculateLandStrengthAtChunk(x, y, seed);
+      // Only create lakes on land areas
+      if (elevation >= 0.5) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
 }
 
 /**
@@ -694,6 +830,9 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
   // Generate river information
   const river = calculateRiverType(x, y, seed);
   
+  // Determine if this tile has a lake
+  const lake = isLake(x, y, seed);
+  
   return {
     type: tileType,
     x,
@@ -703,7 +842,8 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
     moisture,
     biome,
     elevationType,
-    river
+    river,
+    lake
   };
 }
 

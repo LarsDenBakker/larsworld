@@ -30,6 +30,7 @@ const STABLE_SEEDS = [
 /**
  * Generate a river-only PNG for debugging river flow patterns
  * Shows rivers as actual flowing lines, not full-tile coloring
+ * Also shows lakes as blue areas
  */
 async function generateRiverOnlyPng(map, mapSize, filepath) {
   const cellSize = 2; // 2x2 pixels per tile to match main images
@@ -48,6 +49,9 @@ async function generateRiverOnlyPng(map, mapSize, filepath) {
       if (tile.type === 'ocean') {
         // Light blue for ocean to show coastlines
         color = [173, 216, 230, 255];
+      } else if (tile.lake) {
+        // Medium blue for lakes (darker than ocean, lighter than rivers)
+        color = [100, 150, 200, 255];
       }
       
       // Fill pixels for this tile

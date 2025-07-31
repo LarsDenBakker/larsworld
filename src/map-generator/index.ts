@@ -525,16 +525,15 @@ function createLake(centerX: number, centerY: number, lakes: Set<string>, baseRa
   const maxRadius = Math.floor(baseRadius * 2.0 + 3);
   const actualRadius = minRadius + Math.floor(seedRandom(seed + centerX * 1000 + centerY)() * (maxRadius - minRadius + 1));
   
-  // Use multiple noise layers for complex irregular shorelines
+  // Use fewer noise layers for smoother but still irregular shorelines
   const lakeNoise = new PerlinNoise(seed + centerX * 313 + centerY * 619);
   const shorelineNoise = new PerlinNoise(seed + centerX * 97 + centerY * 241);
   const detailNoise = new PerlinNoise(seed + centerX * 167 + centerY * 419);
-  const complexityNoise = new PerlinNoise(seed + centerX * 73 + centerY * 139);
   
   // Get center elevation for reference
   const centerElevation = calculateLandStrengthAtChunk(centerX, centerY, seed);
   
-  // Create highly irregular lake boundary with fractal-like complexity
+  // Create irregular lake boundary with smoother edges
   const scanRadius = maxRadius + 4;
   for (let dy = -scanRadius; dy <= scanRadius; dy++) {
     for (let dx = -scanRadius; dx <= scanRadius; dx++) {
@@ -547,35 +546,31 @@ function createLake(centerX: number, centerY: number, lakes: Set<string>, baseRa
       
       const distance = Math.sqrt(dx * dx + dy * dy);
       
-      // Create complex, highly irregular shoreline using multiple noise layers
+      // Create irregular but smoother shoreline using fewer noise layers
       const angle = Math.atan2(dy, dx);
       
-      // Primary shoreline variation (large-scale irregularity)
-      const primaryScale = 0.15; // Lower frequency for larger features
-      const primaryVariation = shorelineNoise.noise(x * primaryScale, y * primaryScale) * 1.2;
+      // Primary shoreline variation (large-scale irregularity) - reduced intensity
+      const primaryScale = 0.12; // Slightly lower frequency for smoother features
+      const primaryVariation = shorelineNoise.noise(x * primaryScale, y * primaryScale) * 0.8;
       
-      // Secondary detail (medium-scale features like inlets and peninsulas)
-      const detailScale = 0.4; // Higher frequency for smaller features
-      const detailVariation = detailNoise.noise(x * detailScale, y * detailScale) * 0.8;
+      // Secondary detail (medium-scale features like inlets and peninsulas) - reduced intensity
+      const detailScale = 0.3; // Lower frequency for smoother features
+      const detailVariation = detailNoise.noise(x * detailScale, y * detailScale) * 0.5;
       
-      // Fine complexity (small-scale jaggedness)
-      const complexityScale = 0.8; // Very high frequency for fine detail
-      const complexityVariation = complexityNoise.noise(x * complexityScale, y * complexityScale) * 0.4;
+      // Simplified radial variation for organic shape stretching - reduced intensity
+      const radialVariation = Math.sin(angle * 2.5) * 0.2 + Math.cos(angle * 1.8) * 0.15;
       
-      // Radial variation based on angle for organic shape stretching
-      const radialVariation = Math.sin(angle * 3.7) * 0.3 + Math.cos(angle * 2.1) * 0.2;
-      
-      // Combine all variations for highly irregular boundary
-      const totalVariation = primaryVariation + detailVariation + complexityVariation + radialVariation;
-      const irregularRadius = actualRadius + totalVariation * actualRadius * 0.6;
+      // Combine variations for irregular but smoother boundary
+      const totalVariation = primaryVariation + detailVariation + radialVariation;
+      const irregularRadius = actualRadius + totalVariation * actualRadius * 0.4;
       
       // Strong elevation-based inclusion - creates natural basins
       const elevationDiff = centerElevation - elevation;
       const elevationBonus = elevationDiff > 0 ? elevationDiff * 3.5 : -Math.abs(elevationDiff) * 1.5;
       
-      // Terrain suitability with higher variation
+      // Terrain suitability with reduced variation for smoother edges
       const terrainSuitability = lakeNoise.octaveNoise(x * 0.08, y * 0.08, 3, 0.6);
-      const terrainBonus = terrainSuitability * 2.0;
+      const terrainBonus = terrainSuitability * 1.2; // Reduced from 2.0 to 1.2
       
       // Final radius calculation with all factors
       const finalRadius = irregularRadius + elevationBonus + terrainBonus;

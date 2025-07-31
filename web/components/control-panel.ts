@@ -25,6 +25,18 @@ export class ControlPanel extends LitElement {
     statusMessage: { type: String }
   };
 
+  // TypeScript property declarations
+  declare minX: number;
+  declare maxX: number;
+  declare minY: number;
+  declare maxY: number;
+  declare worldName: string;
+  declare isGenerating: boolean;
+  declare isPaused: boolean;
+  declare canStart: boolean;
+  declare estimatedSize: string;
+  declare statusMessage: string;
+
   static styles = css`
     :host {
       display: block;

@@ -21,6 +21,12 @@ export class WorldMap extends LitElement {
     tileSize: { type: Number }
   };
 
+  // TypeScript property declarations
+  declare chunks: Map<string, ChunkData>;
+  declare isGenerating: boolean;
+  declare chunkSize: number;
+  declare tileSize: number;
+
   canvas!: HTMLCanvasElement;
 
   private context: CanvasRenderingContext2D | null = null;
@@ -107,15 +113,25 @@ export class WorldMap extends LitElement {
   };
 
   firstUpdated() {
-    this.canvas = this.shadowRoot!.querySelector('canvas')!;
-    if (this.canvas) {
-      this.context = this.canvas.getContext('2d');
-    }
+    this._initializeCanvas();
   }
 
   updated(changedProperties: Map<string | number | symbol, unknown>) {
+    // Ensure canvas is initialized when it becomes available
+    if (!this.canvas) {
+      this._initializeCanvas();
+    }
+    
     if (changedProperties.has('chunks') && this.chunks.size > 0) {
       this._renderMap();
+    }
+  }
+
+  private _initializeCanvas() {
+    const canvas = this.shadowRoot?.querySelector('canvas');
+    if (canvas && !this.canvas) {
+      this.canvas = canvas;
+      this.context = canvas.getContext('2d');
     }
   }
 

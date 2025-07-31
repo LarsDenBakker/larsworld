@@ -227,8 +227,14 @@ function calculateFlowAccumulation(x: number, y: number, seed: number): number {
 
 /**
  * Determine the river segment type (simplified)
+ * DISABLED: Always returns 'none' to disable river generation
  */
 function calculateRiverType(x: number, y: number, seed: number): RiverType {
+  // Rivers disabled - always return 'none'
+  return 'none';
+  
+  // Original river generation logic (commented out):
+  /*
   const elevation = calculateLandStrengthAtChunk(x, y, seed);
   
   // No rivers in ocean
@@ -264,6 +270,7 @@ function calculateRiverType(x: number, y: number, seed: number): RiverType {
       return 'bend_nw';
     }
   }
+  */
 }
 
 /**

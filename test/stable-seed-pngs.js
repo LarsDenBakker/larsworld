@@ -29,11 +29,10 @@ const STABLE_SEEDS = [
 export async function generateStableSeedPngs() {
   console.log('Generating stable seed PNG images using chunk-based generation...\n');
   
-  // Generate 96x96 maps (6x6 chunks) for visual validation
-  // Note: Main ocean coverage tests use 60x60 chunks (960x960 tiles)
-  // but PNGs use smaller size for practicality
-  const chunksPerSide = 6;
-  const mapSize = chunksPerSide * CHUNK_SIZE; // 96x96
+  // Generate 960x960 maps (60x60 chunks) for visual validation
+  // Same size as main ocean coverage tests
+  const chunksPerSide = 60;
+  const mapSize = chunksPerSide * CHUNK_SIZE; // 960x960
   const imageDir = path.join(__dirname, 'map-images');
   
   // Ensure directory exists
@@ -149,8 +148,7 @@ These images should be updated whenever the world generator algorithm changes.
 
 ## Generation Details
 
-- **Map Size**: ${mapSize}x${mapSize} tiles (${chunksPerSide}x${chunksPerSide} chunks, subset for visual testing)
-- **Note**: Main ocean coverage tests use 60x60 chunks (960x960 tiles)
+- **Map Size**: ${mapSize}x${mapSize} tiles (${chunksPerSide}x${chunksPerSide} chunks)
 - **Image Size**: ${mapSize * 2}x${mapSize * 2} pixels (2x2 pixels per tile)
 - **Generated**: ${new Date().toISOString()}
 - **Maps Meeting Specs**: ${report.meetsSpecsCount}/${report.totalMaps}
@@ -171,8 +169,8 @@ ${results.map((r, i) =>
 ## Requirements (from specs)
 
 - Chunk-based generation ✓
-- 25-35% ocean coverage for 60×60+ chunk maps (main test uses 960×960 tiles)
-- PNG visual samples use ${mapSize}×${mapSize} tiles for practicality
+- 25-35% ocean coverage for 60×60+ chunk maps ✓
+- PNG visual samples use ${mapSize}×${mapSize} tiles (same as main ocean coverage test)
 - Only 'land' and 'ocean' tile types ✓
 - Deterministic generation with seeds ✓
 - 1-3 continents separated by ocean

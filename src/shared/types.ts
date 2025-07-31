@@ -38,6 +38,24 @@ export const BIOME_TYPES = [
 export type BiomeType = typeof BIOME_TYPES[number];
 export type TileIndex = number; // 0-1 index into TILE_TYPES array
 
+// River segment types for realistic river networks
+export const RIVER_TYPES = [
+  'none',      // No river segment
+  'horizontal', // Horizontal river segment (west-east)
+  'vertical',   // Vertical river segment (north-south)
+  'bend_ne',    // Bend from north to east
+  'bend_nw',    // Bend from north to west
+  'bend_se',    // Bend from south to east
+  'bend_sw',    // Bend from south to west
+  'bend_en',    // Bend from east to north
+  'bend_es',    // Bend from east to south
+  'bend_wn',    // Bend from west to north
+  'bend_ws'     // Bend from west to south
+] as const;
+
+export type RiverType = typeof RIVER_TYPES[number];
+export type RiverIndex = number; // 0-10 index into RIVER_TYPES array
+
 // Compact tile representation for API responses
 export interface CompactTile {
   /** Tile type index (0-1) */
@@ -50,6 +68,8 @@ export interface CompactTile {
   m: number;
   /** Biome type index */
   b: number;
+  /** River type index (0-10) */
+  r: RiverIndex;
 }
 
 // Full tile representation used internally
@@ -62,6 +82,7 @@ export interface Tile {
   moisture: number; // 0-1, where 0 is driest, 1 is wettest
   biome: BiomeType; // Calculated biome based on elevation, temperature, moisture
   elevationType: ElevationType; // Calculated elevation category
+  river: RiverType; // River segment type at this tile
 }
 
 // API request parameters for paginated map generation (legacy)
@@ -217,12 +238,18 @@ export function tileToCompact(tile: Tile): CompactTile {
     throw new Error(`Unknown biome type: ${tile.biome}`);
   }
   
+  const riverIndex = RIVER_TYPES.indexOf(tile.river);
+  if (riverIndex === -1) {
+    throw new Error(`Unknown river type: ${tile.river}`);
+  }
+  
   return {
     t: tileIndex,
     e: Math.round(tile.elevation * 255),
     tmp: Math.round(tile.temperature * 255),
     m: Math.round(tile.moisture * 255),
-    b: biomeIndex
+    b: biomeIndex,
+    r: riverIndex
   };
 }
 
@@ -235,6 +262,7 @@ export function compactToTile(compact: CompactTile, x: number, y: number): Tile 
   const moisture = compact.m / 255;
   const biome = BIOME_TYPES[compact.b];
   const elevationType = getElevationType(elevation);
+  const river = RIVER_TYPES[compact.r];
   
   return {
     type: TILE_TYPES[compact.t],
@@ -244,7 +272,8 @@ export function compactToTile(compact: CompactTile, x: number, y: number): Tile 
     temperature,
     moisture,
     biome,
-    elevationType
+    elevationType,
+    river
   };
 }
 

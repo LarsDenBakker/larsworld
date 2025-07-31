@@ -246,6 +246,87 @@ function testDeterministicGeneration() {
 }
 
 /**
+ * Test river generation functionality
+ */
+function testRiverGeneration() {
+  try {
+    // Test basic river generation - ensure rivers can be generated
+    const testSeeds = [12345, 54321, 77777];
+    let totalRiverCount = 0;
+    const foundRiverTypes = new Set();
+    const validRiverTypes = new Set(['none', 'horizontal', 'vertical', 'bend_ne', 'bend_nw', 'bend_se', 'bend_sw', 'bend_en', 'bend_es', 'bend_wn', 'bend_ws']);
+    
+    for (const seed of testSeeds) {
+      // Test multiple chunks to increase chance of finding rivers
+      for (let chunkY = 0; chunkY < 4; chunkY++) {
+        for (let chunkX = 0; chunkX < 4; chunkX++) {
+          const chunk = generateChunk(chunkX, chunkY, seed);
+          
+          for (let y = 0; y < CHUNK_SIZE; y++) {
+            for (let x = 0; x < CHUNK_SIZE; x++) {
+              const tile = chunk[y][x];
+              
+              // Validate river type is valid
+              if (!validRiverTypes.has(tile.river)) {
+                return {
+                  name: 'River Generation',
+                  passed: false,
+                  message: `Invalid river type: ${tile.river}. Must be one of: ${Array.from(validRiverTypes).join(', ')}`
+                };
+              }
+              
+              // Count rivers and track types
+              if (tile.river !== 'none') {
+                totalRiverCount++;
+                foundRiverTypes.add(tile.river);
+                
+                // Rivers should only be on land tiles
+                if (tile.type !== 'land') {
+                  return {
+                    name: 'River Generation',
+                    passed: false,
+                    message: `River found on ${tile.type} tile at chunk (${chunkX},${chunkY}) tile (${x},${y}). Rivers should only exist on land tiles.`
+                  };
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Test deterministic river generation
+    const chunk1 = generateChunk(0, 0, 12345);
+    const chunk2 = generateChunk(0, 0, 12345);
+    
+    for (let y = 0; y < CHUNK_SIZE; y++) {
+      for (let x = 0; x < CHUNK_SIZE; x++) {
+        if (chunk1[y][x].river !== chunk2[y][x].river) {
+          return {
+            name: 'River Generation',
+            passed: false,
+            message: `River generation is not deterministic. Tile (${x},${y}) has different river types: ${chunk1[y][x].river} vs ${chunk2[y][x].river}`
+          };
+        }
+      }
+    }
+    
+    return {
+      name: 'River Generation',
+      passed: true,
+      message: `Rivers generated successfully. Found ${totalRiverCount} river tiles across test chunks with types: ${Array.from(foundRiverTypes).join(', ')}`
+    };
+    
+  } catch (error) {
+    return {
+      name: 'River Generation',
+      passed: false,
+      message: `Error: ${error.message}`
+    };
+  }
+}
+
+/**
  * Test that maps are realistic (have reasonable structure) using chunks
  */
 function testMapRealism() {
@@ -522,6 +603,7 @@ async function runAllTests() {
   const tests = [
     testTileTypes,
     testDeterministicGeneration,
+    testRiverGeneration,
     testOceanCoverage60x60,
     testMapRealism,
     testChunkBasedGeneration,

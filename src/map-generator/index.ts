@@ -217,75 +217,196 @@ function calculateFlowDirection(x: number, y: number, seed: number): { dx: numbe
 }
 
 /**
- * Determine if a location should be a river source
- * River sources are placed at high elevation areas with adequate moisture
+ * Cached river system data for each seed
  */
-function isRiverSource(x: number, y: number, seed: number): boolean {
-  const elevation = calculateLandStrengthAtChunk(x, y, seed);
-  
-  // Only land tiles can be river sources
-  if (elevation < 0.5) return false;
-  
-  // Get moisture and temperature values for more realistic source placement
-  const noiseGenerators = getTileNoiseGenerators(seed);
-  let moisture = noiseGenerators.moisture.octaveNoise(x * 0.012, y * 0.012, 4, 0.4);
-  moisture = (moisture + 1) / 2; // Normalize to 0-1
-  
-  // Use cached noise to determine river source placement with elevation and moisture weighting
-  const riverNoise = getRiverNoiseGenerators(seed);
-  const sourceValue = riverNoise.source.octaveNoise(x * 0.008, y * 0.008, 3, 0.6);
-  
-  // River sources prefer relatively higher elevation within the land range
-  const relativeElevation = (elevation - 0.5) / 0.5; // Normalize within land range
-  const heightFactor = Math.max(0.2, relativeElevation); // Give more weight to higher areas
-  
-  // Moderate moisture requirement - not too dry, not necessarily very wet
-  const moistureFactor = Math.max(0.3, moisture);
-  
-  // Combined suitability for river source
-  const suitability = heightFactor * moistureFactor;
-  
-  // More permissive threshold to ensure some rivers generate
-  const threshold = 0.3 - suitability * 0.2;
-  
-  return sourceValue > threshold && suitability > 0.2;
+interface RiverSystemData {
+  riverSources: Array<{x: number, y: number}>;
+  riverPaths: Map<string, RiverType>; // "x,y" -> RiverType
 }
 
+const riverSystemCache = new Map<number, RiverSystemData>();
+
 /**
- * Calculate realistic flow accumulation using multiple noise layers
- * Simulates water collection and drainage patterns across the landscape
+ * Get or generate river system data for a seed
  */
-function calculateFlowAccumulation(x: number, y: number, seed: number): number {
-  const riverNoise = getRiverNoiseGenerators(seed);
-  
-  // Primary drainage pattern - broad river valleys
-  const primaryDrainage = riverNoise.drainage.octaveNoise(x * 0.006, y * 0.006, 4, 0.6);
-  
-  // Secondary watershed patterns - tributary networks
-  const secondaryDrainage = riverNoise.watershed.octaveNoise(x * 0.015, y * 0.015, 3, 0.5);
-  
-  // Elevation-based flow accumulation - adjust for the actual elevation range
-  const elevation = calculateLandStrengthAtChunk(x, y, seed);
-  let elevationFactor = 1.0;
-  
-  if (elevation >= 0.5) {
-    // For land tiles, calculate relative elevation within land range (0.5-1.0)
-    const relativeElevation = (elevation - 0.5) / 0.5; // Normalize to 0-1 within land range
-    elevationFactor = 1.2 - relativeElevation * 0.5; // Higher accumulation at lower elevations within land
-  } else {
-    elevationFactor = 0; // No rivers in ocean
+function getRiverSystemData(seed: number): RiverSystemData {
+  if (riverSystemCache.has(seed)) {
+    return riverSystemCache.get(seed)!;
   }
   
-  // Combine patterns for realistic flow accumulation
-  const baseAccumulation = (primaryDrainage + secondaryDrainage * 0.6) * elevationFactor;
+  const riverSources: Array<{x: number, y: number}> = [];
+  const riverPaths = new Map<string, RiverType>();
   
-  // Normalize and scale for appropriate river density
-  return Math.max(0, (baseAccumulation + 1) * 2.5);
+  // Generate river sources with proper spacing
+  const random = seedRandom(seed + 9999);
+  const riverNoise = getRiverNoiseGenerators(seed);
+  
+  // Use a much larger reference area to cover any potential chunk generation
+  const refWidth = 5000;
+  const refHeight = 5000;
+  const refOffsetX = -2500; // Center the reference area around origin
+  const refOffsetY = -2500;
+  const minSourceSpacing = 80; // Minimum 80 tiles between major river sources
+  
+  // Scan for potential river sources in high-elevation areas
+  const potentialSources: Array<{x: number, y: number, suitability: number}> = [];
+  
+  for (let y = refOffsetY; y < refOffsetY + refHeight; y += 15) { // Sample every 15 tiles for performance
+    for (let x = refOffsetX; x < refOffsetX + refWidth; x += 15) {
+      const elevation = calculateLandStrengthAtChunk(x, y, seed);
+      
+      // Only consider land tiles at higher elevations
+      if (elevation < 0.54) continue; // Need to be in upper ~20% of elevations (since max is ~0.58)
+      
+      // Calculate suitability based on elevation and local terrain
+      const relativeElevation = (elevation - 0.5) / 0.5; // 0-1 within land range
+      const sourceNoise = riverNoise.source.octaveNoise(x * 0.006, y * 0.006, 3, 0.6);
+      const suitability = relativeElevation * 0.7 + (sourceNoise + 1) * 0.15;
+      
+      if (suitability > 0.5) { // Lower suitability threshold to get more sources
+        potentialSources.push({ x, y, suitability });
+      }
+    }
+  }
+  
+  // Sort by suitability and select sources with spacing constraints
+  potentialSources.sort((a, b) => b.suitability - a.suitability);
+  
+  for (const candidate of potentialSources) {
+    // Check spacing constraint
+    let tooClose = false;
+    for (const existing of riverSources) {
+      const dx = candidate.x - existing.x;
+      const dy = candidate.y - existing.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance < minSourceSpacing) {
+        tooClose = true;
+        break;
+      }
+    }
+    
+    if (!tooClose && riverSources.length < 40) { // Allow more rivers in the larger area
+      riverSources.push({ x: candidate.x, y: candidate.y });
+    }
+  }
+  
+  // Generate river paths from each source
+  for (const source of riverSources) {
+    generateRiverPath(source.x, source.y, seed, riverPaths);
+  }
+  
+  const systemData: RiverSystemData = {
+    riverSources,
+    riverPaths
+  };
+  
+  riverSystemCache.set(seed, systemData);
+  return systemData;
 }
 
 /**
- * Determine the river segment type based on terrain and flow patterns
- * Generates realistic river networks that follow elevation and integrate smoothly
+ * Generate a single river path from a source to ocean/lake
+ */
+function generateRiverPath(startX: number, startY: number, seed: number, riverPaths: Map<string, RiverType>): void {
+  const visited = new Set<string>();
+  let currentX = startX;
+  let currentY = startY;
+  const path: Array<{x: number, y: number, flow: {dx: number, dy: number}}> = [];
+  
+  // Follow elevation gradients to create river path
+  for (let step = 0; step < 200; step++) { // Limit path length to prevent infinite loops
+    const key = `${currentX},${currentY}`;
+    
+    // Stop if we've been here before (loop prevention)
+    if (visited.has(key)) break;
+    visited.add(key);
+    
+    const elevation = calculateLandStrengthAtChunk(currentX, currentY, seed);
+    
+    // Stop if we reach ocean
+    if (elevation < 0.5) break;
+    
+    // Calculate flow direction
+    const flowDirection = calculateFlowDirection(currentX, currentY, seed);
+    
+    // Stop if no clear flow direction (local minimum)
+    if (flowDirection.dx === 0 && flowDirection.dy === 0) break;
+    
+    // Record this segment
+    path.push({ x: currentX, y: currentY, flow: flowDirection });
+    
+    // Move to next position
+    currentX += flowDirection.dx;
+    currentY += flowDirection.dy;
+  }
+  
+  // Convert path to river segments
+  for (let i = 0; i < path.length; i++) {
+    const segment = path[i];
+    const key = `${segment.x},${segment.y}`;
+    
+    // Determine river segment type based on flow direction
+    const flow = segment.flow;
+    let riverType: RiverType = 'none';
+    
+    if (flow.dy === 0) {
+      // Pure horizontal flow
+      riverType = 'horizontal';
+    } else if (flow.dx === 0) {
+      // Pure vertical flow
+      riverType = 'vertical';
+    } else {
+      // Diagonal flow - use appropriate bend segments
+      if (flow.dx > 0 && flow.dy > 0) {
+        riverType = 'bend_se';
+      } else if (flow.dx > 0 && flow.dy < 0) {
+        riverType = 'bend_ne';
+      } else if (flow.dx < 0 && flow.dy > 0) {
+        riverType = 'bend_sw';
+      } else {
+        riverType = 'bend_nw';
+      }
+    }
+    
+    riverPaths.set(key, riverType);
+  }
+}
+
+/**
+ * Determine if a location should be a river source
+ * Now uses the cached river system data
+ */
+function isRiverSource(x: number, y: number, seed: number): boolean {
+  const riverSystem = getRiverSystemData(seed);
+  
+  // Check if this location is one of the pre-generated river sources
+  for (const source of riverSystem.riverSources) {
+    if (source.x === x && source.y === y) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Calculate realistic flow accumulation using cached river system
+ * Now much simpler - just check if this tile is part of a river path
+ */
+function calculateFlowAccumulation(x: number, y: number, seed: number): number {
+  const riverSystem = getRiverSystemData(seed);
+  const key = `${x},${y}`;
+  
+  // If this tile is part of a river path, return high accumulation
+  if (riverSystem.riverPaths.has(key)) {
+    return 5.0; // High value to ensure river generation
+  }
+  
+  return 0.0; // No accumulation for non-river tiles
+}
+
+/**
+ * Determine the river segment type based on cached river system data
  */
 function calculateRiverType(x: number, y: number, seed: number): RiverType {
   const elevation = calculateLandStrengthAtChunk(x, y, seed);
@@ -293,43 +414,11 @@ function calculateRiverType(x: number, y: number, seed: number): RiverType {
   // No rivers in ocean
   if (elevation < 0.5) return 'none';
   
-  const flowAccumulation = calculateFlowAccumulation(x, y, seed);
-  const isSource = isRiverSource(x, y, seed);
+  const riverSystem = getRiverSystemData(seed);
+  const key = `${x},${y}`;
   
-  // Optimized thresholds for realistic river density (target: 5-15% of land tiles)
-  const sourceThreshold = 2.9;
-  const riverThreshold = isSource ? sourceThreshold : 3.2;
-  
-  if (flowAccumulation < riverThreshold) return 'none';
-  
-  const flowDirection = calculateFlowDirection(x, y, seed);
-  
-  // If no clear flow direction, no river (e.g., at local elevation peaks)
-  if (flowDirection.dx === 0 && flowDirection.dy === 0) return 'none';
-  
-  // Determine segment type based on flow direction for realistic river visualization
-  if (flowDirection.dy === 0) {
-    // Pure horizontal flow
-    return 'horizontal';
-  } else if (flowDirection.dx === 0) {
-    // Pure vertical flow
-    return 'vertical';
-  } else {
-    // Diagonal flow - use appropriate bend segments for smooth connections
-    if (flowDirection.dx > 0 && flowDirection.dy > 0) {
-      // Southeast flow
-      return 'bend_se';
-    } else if (flowDirection.dx > 0 && flowDirection.dy < 0) {
-      // Northeast flow
-      return 'bend_ne';
-    } else if (flowDirection.dx < 0 && flowDirection.dy > 0) {
-      // Southwest flow
-      return 'bend_sw';
-    } else {
-      // Northwest flow
-      return 'bend_nw';
-    }
-  }
+  // Return the pre-calculated river type for this tile
+  return riverSystem.riverPaths.get(key) || 'none';
 }
 
 /**
@@ -625,16 +714,18 @@ export function clearGenerationCaches(): void {
   continentCache.clear();
   tileNoiseCache.clear();
   riverNoiseCache.clear();
+  riverSystemCache.clear();
 }
 
 /**
  * Get cache statistics for debugging
  */
-export function getCacheStats(): { continents: number, tileNoise: number, riverNoise: number } {
+export function getCacheStats(): { continents: number, tileNoise: number, riverNoise: number, riverSystems: number } {
   return {
     continents: continentCache.size,
     tileNoise: tileNoiseCache.size,
-    riverNoise: riverNoiseCache.size
+    riverNoise: riverNoiseCache.size,
+    riverSystems: riverSystemCache.size
   };
 }
 

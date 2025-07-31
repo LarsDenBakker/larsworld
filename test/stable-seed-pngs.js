@@ -89,9 +89,8 @@ export async function generateStableSeedPngs() {
       const oceanPercentage = (oceanCount / totalTiles) * 100;
       const landPercentage = (landCount / totalTiles) * 100;
       
-      // Generate both simple and elevation-based PNGs
+      // Generate simple PNG only (elevation images removed per requirement)
       const simplePngPath = path.join(imageDir, `seed-${seed}-simple.png`);
-      const elevationPngPath = path.join(imageDir, `seed-${seed}-elevation.png`);
       
       await saveMapPng(map, simplePngPath, {
         width: mapSize,
@@ -100,20 +99,12 @@ export async function generateStableSeedPngs() {
         showElevation: false
       });
       
-      await saveMapPng(map, elevationPngPath, {
-        width: mapSize,
-        height: mapSize,
-        cellSize: 2,
-        showElevation: true
-      });
-      
       results.push({
         seed,
         oceanPercentage: oceanPercentage.toFixed(1),
         landPercentage: landPercentage.toFixed(1),
         meetsSpecs: oceanPercentage >= 25 && oceanPercentage <= 35,
-        simplePng: `seed-${seed}-simple.png`,
-        elevationPng: `seed-${seed}-elevation.png`
+        simplePng: `seed-${seed}-simple.png`
       });
       
       console.log(`  Ocean: ${oceanPercentage.toFixed(1)}%, Land: ${landPercentage.toFixed(1)}%`);
@@ -155,9 +146,8 @@ These images should be updated whenever the world generator algorithm changes.
 
 ## Files
 
-Each seed generates two images:
+Each seed generates one image:
 - \`seed-{number}-simple.png\`: Simple land (green) vs ocean (blue) visualization
-- \`seed-{number}-elevation.png\`: Elevation-based coloring
 
 ## Stable Seeds
 

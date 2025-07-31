@@ -492,17 +492,17 @@ function testChunkOceanCoverage() {
 }
 
 /**
- * Test stable seed PNG generation
+ * Test stable seed PNG generation and integrate it into main test suite
  */
 async function testStableSeedPngs() {
   try {
-    console.log('Generating stable seed PNG images...');
+    console.log('Generating stable seed PNG images (now part of test suite)...');
     await generateStableSeedPngs();
     
     return {
       name: 'Stable Seed PNG Generation',
       passed: true,
-      message: 'Successfully generated PNG images for all stable seeds'
+      message: 'Successfully generated PNG images for all stable seeds (elevation images removed)'
     };
   } catch (error) {
     return {

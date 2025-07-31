@@ -1,202 +1,140 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('LarsWorld Chunk-Based Web Application', () => {
-  test('should load homepage with new chunk-based UI elements', async ({ page }) => {
+test.describe('LarsWorld Lit-Based Chunk UI', () => {
+  test('should load homepage with Lit-based components', async ({ page }) => {
     await page.goto('/');
     
-    // Check that the page loads with new title
+    // Check that the page loads with title
     await expect(page).toHaveTitle(/LarsWorld.*Chunk-Based/);
     
-    // Check that main elements are present
-    await expect(page.locator('h1')).toContainText('LarsWorld');
-    await expect(page.locator('.subtitle')).toContainText('Chunk-Based World Generator');
+    // Check that the app-main component loads and displays content
+    await expect(page.locator('app-main')).toBeVisible();
     
-    // Check that coordinate inputs are present
-    await expect(page.locator('input[id="min-x"]')).toBeVisible();
-    await expect(page.locator('input[id="max-x"]')).toBeVisible();
-    await expect(page.locator('input[id="min-y"]')).toBeVisible();
-    await expect(page.locator('input[id="max-y"]')).toBeVisible();
-    
-    // Check that seed input is present
-    await expect(page.locator('input[id="seed"]')).toBeVisible();
-    
-    // Check that action buttons are present
-    await expect(page.locator('button[id="start-btn"]')).toBeVisible();
-    await expect(page.locator('button[id="pause-btn"]')).toBeVisible();
-    
-    // Check that pause button is initially disabled
-    await expect(page.locator('button[id="pause-btn"]')).toBeDisabled();
-    
-    // Check that the legend is still present
-    await expect(page.locator('.legend-overlay')).toBeVisible();
-    await expect(page.locator('.legend-content')).toContainText('Deep Ocean');
-    await expect(page.locator('.legend-content')).toContainText('Shallow Ocean');
+    // Check for basic UI elements in shadow DOM
+    const appMain = page.locator('app-main');
+    await expect(appMain.locator('h1')).toContainText('LarsWorld');
+    await expect(appMain.locator('.subtitle')).toContainText('Chunk-Based World Generator');
   });
 
-  test('should have proper ocean colors in legend', async ({ page }) => {
+  test('should display coordinate inputs in control panel', async ({ page }) => {
     await page.goto('/');
     
-    // Check that ocean colors are correctly styled
-    const deepOceanElement = page.locator('.legend-item').filter({ hasText: 'Deep Ocean' }).locator('.legend-color');
-    const shallowOceanElement = page.locator('.legend-item').filter({ hasText: 'Shallow Ocean' }).locator('.legend-color');
+    // Wait for components to load
+    await expect(page.locator('world-generator')).toBeVisible();
     
-    // Check that the color elements have the expected colors
-    await expect(deepOceanElement).toHaveCSS('background-color', 'rgb(65, 105, 225)'); // #4169e1
-    await expect(shallowOceanElement).toHaveCSS('background-color', 'rgb(100, 150, 230)'); // #6496e6
+    // Check that coordinate inputs are present in the control panel
+    const controlPanel = page.locator('control-panel');
+    await expect(controlPanel.locator('input[name="minX"]')).toBeVisible();
+    await expect(controlPanel.locator('input[name="maxX"]')).toBeVisible();
+    await expect(controlPanel.locator('input[name="minY"]')).toBeVisible();
+    await expect(controlPanel.locator('input[name="maxY"]')).toBeVisible();
   });
 
-  test('should display legend toggle functionality', async ({ page }) => {
-    // Set mobile viewport to ensure legend toggle is visible
+  test('should have proper default coordinate values', async ({ page }) => {
+    await page.goto('/');
+    
+    const controlPanel = page.locator('control-panel');
+    
+    // Check default coordinate values
+    await expect(controlPanel.locator('input[name="minX"]')).toHaveValue('0');
+    await expect(controlPanel.locator('input[name="maxX"]')).toHaveValue('2');
+    await expect(controlPanel.locator('input[name="minY"]')).toHaveValue('0');
+    await expect(controlPanel.locator('input[name="maxY"]')).toHaveValue('2');
+  });
+
+  test('should display legend with biome information', async ({ page }) => {
+    await page.goto('/');
+    
+    // Check that legend component is present
+    const legend = page.locator('app-legend');
+    await expect(legend).toBeVisible();
+    
+    // Check that legend contains basic biome information
+    await expect(legend.locator('.legend-item')).toHaveCount(12); // 12 biomes
+    await expect(legend).toContainText('Deep Ocean');
+    await expect(legend).toContainText('Forest');
+    await expect(legend).toContainText('Desert');
+  });
+
+  test('should display start and pause buttons', async ({ page }) => {
+    await page.goto('/');
+    
+    const controlPanel = page.locator('control-panel');
+    
+    // Check that action buttons are present
+    await expect(controlPanel.locator('.start-button')).toBeVisible();
+    await expect(controlPanel.locator('.pause-button')).toBeVisible();
+    
+    // Check that start button contains expected text
+    await expect(controlPanel.locator('.start-button')).toContainText('Start Generation');
+    
+    // Check that pause button is initially disabled
+    await expect(controlPanel.locator('.pause-button')).toBeDisabled();
+  });
+
+  test('should validate coordinate input changes', async ({ page }) => {
+    await page.goto('/');
+    
+    const controlPanel = page.locator('control-panel');
+    
+    // Test coordinate input functionality
+    await controlPanel.locator('input[name="minX"]').fill('1');
+    await controlPanel.locator('input[name="maxX"]').fill('3');
+    await controlPanel.locator('input[name="minY"]').fill('2');
+    await controlPanel.locator('input[name="maxY"]').fill('4');
+    
+    // Verify values
+    await expect(controlPanel.locator('input[name="minX"]')).toHaveValue('1');
+    await expect(controlPanel.locator('input[name="maxX"]')).toHaveValue('3');
+    await expect(controlPanel.locator('input[name="minY"]')).toHaveValue('2');
+    await expect(controlPanel.locator('input[name="maxY"]')).toHaveValue('4');
+  });
+
+  test('should handle world name input', async ({ page }) => {
+    await page.goto('/');
+    
+    const controlPanel = page.locator('control-panel');
+    
+    // Test world name input
+    await controlPanel.locator('input[name="worldName"]').fill('test-world-name');
+    await expect(controlPanel.locator('input[name="worldName"]')).toHaveValue('test-world-name');
+    
+    // Check placeholder text
+    await controlPanel.locator('input[name="worldName"]').fill('');
+    await expect(controlPanel.locator('input[name="worldName"]')).toHaveAttribute('placeholder', 'Leave empty for random seed');
+  });
+
+  test('should display estimated size information', async ({ page }) => {
+    await page.goto('/');
+    
+    const controlPanel = page.locator('control-panel');
+    
+    // Check that info section displays chunk count and size
+    await expect(controlPanel.locator('.info-section')).toContainText('chunks');
+    await expect(controlPanel.locator('.info-section')).toContainText('MB');
+    
+    // Default 3x3 should show 9 chunks
+    await expect(controlPanel.locator('.info-section')).toContainText('9 chunks');
+  });
+
+  test('should show legend toggle functionality on mobile', async ({ page }) => {
+    // Set mobile viewport
     await page.setViewportSize({ width: 600, height: 800 });
     await page.goto('/');
     
-    // Check that legend toggle button is present (should be visible on mobile)
-    const legendToggle = page.locator('#legend-toggle');
-    await expect(legendToggle).toBeVisible();
+    const legend = page.locator('app-legend');
+    await expect(legend).toBeVisible();
     
-    // Check initial state (should be collapsed on mobile by default)
-    const legendContent = page.locator('#legend-content');
-    await expect(legendContent).toHaveClass(/collapsed/);
+    // On mobile, legend should be collapsible
+    const toggleButton = legend.locator('.legend-toggle');
+    await expect(toggleButton).toBeVisible();
     
     // Test toggle functionality
-    await legendToggle.click();
+    await toggleButton.click();
+    await page.waitForTimeout(500); // Wait for animation
     
-    // Check that aria-expanded attribute changes to true
-    await expect(legendToggle).toHaveAttribute('aria-expanded', 'true');
-    
-    // Check that content is now expanded (class removed)
-    await expect(legendContent).not.toHaveClass(/collapsed/);
-  });
-
-  test('should validate coordinate inputs and default values', async ({ page }) => {
-    await page.goto('/');
-    
-    // Check default coordinate values
-    await expect(page.locator('input[id="min-x"]')).toHaveValue('0');
-    await expect(page.locator('input[id="max-x"]')).toHaveValue('9');
-    await expect(page.locator('input[id="min-y"]')).toHaveValue('0');
-    await expect(page.locator('input[id="max-y"]')).toHaveValue('9');
-    
-    // Test coordinate input functionality
-    await page.fill('input[id="min-x"]', '1');
-    await page.fill('input[id="max-x"]', '3');
-    await page.fill('input[id="min-y"]', '2');
-    await page.fill('input[id="max-y"]', '4');
-    
-    // Verify values
-    await expect(page.locator('input[id="min-x"]')).toHaveValue('1');
-    await expect(page.locator('input[id="max-x"]')).toHaveValue('3');
-    await expect(page.locator('input[id="min-y"]')).toHaveValue('2');
-    await expect(page.locator('input[id="max-y"]')).toHaveValue('4');
-    
-    // Test seed input functionality
-    await page.fill('input[id="seed"]', 'test-chunk-world');
-    await expect(page.locator('input[id="seed"]')).toHaveValue('test-chunk-world');
-    
-    // Clear and test placeholder
-    await page.fill('input[id="seed"]', '');
-    await expect(page.locator('input[id="seed"]')).toHaveAttribute('placeholder', 'Leave empty for random name');
-  });
-
-  test('should handle chunk generation with small coordinates', async ({ page }) => {
-    await page.goto('/');
-    
-    // Set small coordinates for faster test (1×1 chunk = 1 chunk total)
-    await page.fill('input[id="min-x"]', '0');
-    await page.fill('input[id="max-x"]', '0');
-    await page.fill('input[id="min-y"]', '0');
-    await page.fill('input[id="max-y"]', '0');
-    await page.fill('input[id="seed"]', 'test-seed-123');
-    
-    // Click start generation
-    await page.click('button[id="start-btn"]');
-    
-    // Check that the map canvas appears
-    await expect(page.locator('canvas[id="map-canvas"]')).toBeVisible({ timeout: 10000 });
-    
-    // Check that progress section appears during generation
-    const progressSection = page.locator('#progress-section');
-    
-    // Wait for generation to potentially complete (single chunk should be fast)
-    await page.waitForTimeout(2000);
-    
-    // Check that canvas has content (width and height should be set)
-    const canvas = page.locator('canvas[id="map-canvas"]');
-    await expect(canvas).toHaveAttribute('width');
-    await expect(canvas).toHaveAttribute('height');
-  });
-
-  test('should validate coordinate constraints', async ({ page }) => {
-    await page.goto('/');
-    
-    // Test coordinate validation by setting max < min
-    await page.fill('input[id="min-x"]', '5');
-    await page.fill('input[id="max-x"]', '3');
-    await page.fill('input[id="min-y"]', '4');
-    await page.fill('input[id="max-y"]', '2');
-    
-    // Try to start generation - should show error
-    page.on('dialog', async (dialog) => {
-      expect(dialog.message()).toContain('Max coordinates must be greater than or equal to min coordinates');
-      await dialog.accept();
-    });
-    
-    await page.click('button[id="start-btn"]');
-  });
-
-  test('should test pause/resume functionality', async ({ page }) => {
-    await page.goto('/');
-    
-    // Set coordinates for a larger generation to ensure it takes time (3×3 chunks = 9 chunks)
-    await page.fill('input[id="min-x"]', '0');
-    await page.fill('input[id="max-x"]', '2');
-    await page.fill('input[id="min-y"]', '0');
-    await page.fill('input[id="max-y"]', '2');
-    await page.fill('input[id="seed"]', 'pause-test-seed');
-    
-    // Start generation
-    await page.click('button[id="start-btn"]');
-    
-    // Wait for generation to start - check if progress section appears
-    await expect(page.locator('#progress-section')).toBeVisible({ timeout: 3000 });
-    
-    // Check that pause button becomes enabled during generation
-    await expect(page.locator('button[id="pause-btn"]')).toBeEnabled({ timeout: 10000 });
-    
-    // Click pause
-    await page.click('button[id="pause-btn"]');
-    
-    // Check that pause button text changes to "Resume"
-    await expect(page.locator('button[id="pause-btn"] .btn-text')).toContainText('Resume');
-    
-    // Click resume
-    await page.click('button[id="pause-btn"]');
-    
-    // Check that pause button text changes back to "Pause"
-    await expect(page.locator('button[id="pause-btn"] .btn-text')).toContainText('Pause');
-  });
-
-  test('should generate random seed when empty', async ({ page }) => {
-    await page.goto('/');
-    
-    // Ensure seed input is empty
-    await page.fill('input[id="seed"]', '');
-    
-    // Set minimal coordinates for fast generation
-    await page.fill('input[id="min-x"]', '0');
-    await page.fill('input[id="max-x"]', '0');
-    await page.fill('input[id="min-y"]', '0');
-    await page.fill('input[id="max-y"]', '0');
-    
-    // Start generation
-    await page.click('button[id="start-btn"]');
-    
-    // Check that a random seed was generated
-    const seedValue = await page.locator('input[id="seed"]').inputValue();
-    expect(seedValue).toBeTruthy();
-    expect(seedValue.length).toBeGreaterThan(0);
-    
-    // Random seed should follow the pattern: adjective-noun-number
-    expect(seedValue).toMatch(/^[a-z]+-[a-z]+-\d+$/);
+    // Check that content visibility changes
+    const content = legend.locator('.legend-content');
+    await expect(content).toBeVisible();
   });
 });

@@ -87,6 +87,60 @@ router.get('/chunk', (req, res) => {
   }
 });
 
+// POST version of chunk endpoint for frontend compatibility
+router.post('/chunk', (req, res) => {
+  try {
+    // Parse POST body - chunkX, chunkY, and seed
+    const { chunkX, chunkY, seed = 'default' } = req.body;
+
+    // Validate numeric inputs
+    if (typeof chunkX !== 'number' || typeof chunkY !== 'number') {
+      const error: ApiError = {
+        error: 'Invalid chunk coordinates',
+        details: 'chunkX and chunkY must be valid numbers'
+      };
+      return res.status(400).json(error);
+    }
+
+    const request: MapChunkRequest = {
+      chunkX,
+      chunkY,
+      seed
+    };
+
+    console.log(`[Chunk Map POST] Request: chunkX=${chunkX}, chunkY=${chunkY}, seed=${seed} (16x16 chunk)`);
+
+    // Validate request
+    validateMapChunkRequest(request);
+
+    // Generate the requested chunk
+    const startTime = Date.now();
+    const response = generateMapChunk(request);
+    const duration = Date.now() - startTime;
+
+    console.log(`[Chunk Map POST] Generated chunk (${chunkX}, ${chunkY}) in ${duration}ms, size: ${Math.round(response.sizeBytes / 1024)}KB`);
+
+    // Check if payload exceeds 6MB limit (shouldn't happen for single chunks)
+    if (response.sizeBytes > 6 * 1024 * 1024) {
+      const error: ApiError = {
+        error: 'Payload too large',
+        details: `Generated ${Math.round(response.sizeBytes / 1024 / 1024 * 100) / 100}MB, exceeds 6MB limit`
+      };
+      return res.status(413).json(error);
+    }
+
+    res.json(response);
+
+  } catch (error) {
+    console.error('[Chunk Map POST] Error:', error);
+    const apiError: ApiError = {
+      error: 'Chunk generation failed',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    };
+    res.status(400).json(apiError);
+  }
+});
+
 
 
 export default router;

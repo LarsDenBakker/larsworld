@@ -410,16 +410,15 @@ function calculateLandStrengthAtChunk(x: number, y: number, seed: number): numbe
   // Combine noise layers for natural landmass shape
   let elevation = continentShape * 0.6 + mediumFeatures * 0.3 + coastalDetails * 0.1;
   
-  // Optimized distance-based influence from continent centers
+  // Add distance-based influence from continent centers for separation
   let centerInfluence = 0;
-  const influenceScale = 1.0 / (referenceWidth * 0.3);
   for (const center of centers) {
-    const dx = (x - center.x) * influenceScale;
-    const dy = (y - center.y) * influenceScale;
-    const distanceSquared = dx * dx + dy * dy;
+    const dx = (x - center.x) / (referenceWidth * 0.3); // Influence area
+    const dy = (y - center.y) / (referenceHeight * 0.3);
+    const distance = Math.sqrt(dx * dx + dy * dy);
     
-    // Avoid expensive sqrt and pow operations
-    const influence = distanceSquared < 1 ? Math.max(0, 1 - distanceSquared * 1.8) : 0;
+    // Smooth falloff from continent centers
+    const influence = Math.max(0, 1 - Math.pow(distance, 1.8));
     centerInfluence = Math.max(centerInfluence, influence);
   }
   

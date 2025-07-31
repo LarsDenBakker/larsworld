@@ -11,16 +11,14 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
         }
         
-        /* Reset for custom elements */
-        app-main {
-            display: block;
+        #root {
+            width: 100%;
+            height: 100vh;
         }
     </style>
 </head>
 <body>
-    <app-main></app-main>
-    
-    <!-- Import the main app component -->
-    <script type="module" src="components/app-main.ts"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

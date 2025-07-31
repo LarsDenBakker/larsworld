@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { generateMapPage, validateMapPageRequest } from '../map-generator/index.js';
-import { MapPageRequest, ApiError } from '../shared/types.js';
+import { generateMapChunk, validateMapChunkRequest } from '../map-generator/index.js';
+import { MapChunkRequest, ApiError } from '../shared/types.js';
 
 const router = Router();
 
@@ -30,95 +30,43 @@ router.post('/test-payload', (req, res) => {
   }
 });
 
-// Simple test endpoint for small map generation
-router.get('/test-map', async (req, res) => {
-  try {
-    // Import generateMap for testing
-    const { generateMap } = await import('../map-generator/index.js');
-    
-    // Generate a small test map
-    const width = parseInt(req.query.width as string) || 50;
-    const height = parseInt(req.query.height as string) || 50;
-    
-    // Limit to reasonable test sizes
-    if (width > 100 || height > 100) {
-      return res.status(400).json({ error: 'Test maps limited to 100x100 for performance' });
-    }
-    
-    console.log(`[Test Map] Generating ${width}x${height} test map...`);
-    const startTime = Date.now();
-    
-    const map = generateMap(width, height);
-    
-    const duration = Date.now() - startTime;
-    
-    // Count biomes
-    const biomeCounts: Record<string, number> = {};
-    let edgeOceanCount = 0;
-    let totalEdges = 0;
-    
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const biome = map[y][x].type;
-        biomeCounts[biome] = (biomeCounts[biome] || 0) + 1;
-        
-        // Check if this is an edge tile
-        if (x === 0 || x === width - 1 || y === 0 || y === height - 1) {
-          totalEdges++;
-          if (biome === 'ocean') {
-            edgeOceanCount++;
-          }
-        }
-      }
-    }
-    
-    console.log(`[Test Map] Generated in ${duration}ms, ${edgeOceanCount}/${totalEdges} edges are ocean`);
-    
-    res.json({
-      width,
-      height,
-      generationTime: duration,
-      biomeCounts,
-      edgeOceanRatio: edgeOceanCount / totalEdges,
-      allEdgesOcean: edgeOceanCount === totalEdges
-    });
-    
-  } catch (error) {
-    console.error('[Test Map] Error:', error);
-    res.status(500).json({ 
-      error: 'Test map generation failed',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
 
-// Paginated map generation endpoint
-router.get('/map', (req, res) => {
+// Chunk-based map generation endpoint - new primary method
+router.get('/chunk', (req, res) => {
   try {
-    // Parse query parameters - only page, pageSize, and seed matter
-    const page = parseInt(req.query.page as string) || 0;
-    const pageSize = parseInt(req.query.pageSize as string) || 64;
+    // Parse query parameters - chunkX, chunkY, and seed
+    const chunkX = parseInt(req.query.chunkX as string);
+    const chunkY = parseInt(req.query.chunkY as string);
     const seed = req.query.seed as string || 'default';
 
-    const request: MapPageRequest = {
-      page,
-      pageSize,
+    // Validate numeric inputs
+    if (isNaN(chunkX) || isNaN(chunkY)) {
+      const error: ApiError = {
+        error: 'Invalid chunk coordinates',
+        details: 'chunkX and chunkY must be valid integers'
+      };
+      return res.status(400).json(error);
+    }
+
+    const request: MapChunkRequest = {
+      chunkX,
+      chunkY,
       seed
     };
 
-    console.log(`[Paginated Map] Request: page=${page}, pageSize=${pageSize}, seed=${seed} (fixed 1000x1000)`);
+    console.log(`[Chunk Map] Request: chunkX=${chunkX}, chunkY=${chunkY}, seed=${seed} (16x16 chunk)`);
 
     // Validate request
-    validateMapPageRequest(request);
+    validateMapChunkRequest(request);
 
-    // Generate the requested page
+    // Generate the requested chunk
     const startTime = Date.now();
-    const response = generateMapPage(request);
+    const response = generateMapChunk(request);
     const duration = Date.now() - startTime;
 
-    console.log(`[Paginated Map] Generated page ${page} in ${duration}ms, size: ${Math.round(response.sizeBytes / 1024)}KB`);
+    console.log(`[Chunk Map] Generated chunk (${chunkX}, ${chunkY}) in ${duration}ms, size: ${Math.round(response.sizeBytes / 1024)}KB`);
 
-    // Check if payload exceeds 6MB limit
+    // Check if payload exceeds 6MB limit (shouldn't happen for single chunks)
     if (response.sizeBytes > 6 * 1024 * 1024) {
       const error: ApiError = {
         error: 'Payload too large',
@@ -130,13 +78,69 @@ router.get('/map', (req, res) => {
     res.json(response);
 
   } catch (error) {
-    console.error('[Paginated Map] Error:', error);
+    console.error('[Chunk Map] Error:', error);
     const apiError: ApiError = {
-      error: 'Map generation failed',
+      error: 'Chunk generation failed',
       details: error instanceof Error ? error.message : 'Unknown error'
     };
     res.status(400).json(apiError);
   }
 });
+
+// POST version of chunk endpoint for frontend compatibility
+router.post('/chunk', (req, res) => {
+  try {
+    // Parse POST body - chunkX, chunkY, and seed
+    const { chunkX, chunkY, seed = 'default' } = req.body;
+
+    // Validate numeric inputs
+    if (typeof chunkX !== 'number' || typeof chunkY !== 'number') {
+      const error: ApiError = {
+        error: 'Invalid chunk coordinates',
+        details: 'chunkX and chunkY must be valid numbers'
+      };
+      return res.status(400).json(error);
+    }
+
+    const request: MapChunkRequest = {
+      chunkX,
+      chunkY,
+      seed
+    };
+
+    console.log(`[Chunk Map POST] Request: chunkX=${chunkX}, chunkY=${chunkY}, seed=${seed} (16x16 chunk)`);
+
+    // Validate request
+    validateMapChunkRequest(request);
+
+    // Generate the requested chunk
+    const startTime = Date.now();
+    const response = generateMapChunk(request);
+    const duration = Date.now() - startTime;
+
+    console.log(`[Chunk Map POST] Generated chunk (${chunkX}, ${chunkY}) in ${duration}ms, size: ${Math.round(response.sizeBytes / 1024)}KB`);
+
+    // Check if payload exceeds 6MB limit (shouldn't happen for single chunks)
+    if (response.sizeBytes > 6 * 1024 * 1024) {
+      const error: ApiError = {
+        error: 'Payload too large',
+        details: `Generated ${Math.round(response.sizeBytes / 1024 / 1024 * 100) / 100}MB, exceeds 6MB limit`
+      };
+      return res.status(413).json(error);
+    }
+
+    res.json(response);
+
+  } catch (error) {
+    console.error('[Chunk Map POST] Error:', error);
+    const apiError: ApiError = {
+      error: 'Chunk generation failed',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    };
+    res.status(400).json(apiError);
+  }
+});
+
+
 
 export default router;

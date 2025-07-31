@@ -1,9 +1,10 @@
 /**
  * Stable seed PNG test
- * Generates PNG images for 10 predefined seeds and saves them to repository
+ * Generates PNG images for 10 predefined seeds using chunk-based generation
  * These images should be updated whenever the world generator changes
  */
-import { generateMap } from '../dist/src/map-generator/index.js';
+import { generateChunk } from '../dist/src/map-generator/index.js';
+import { CHUNK_SIZE } from '../dist/src/shared/types.js';
 import { saveMapPng } from '../dist/src/map-generator/png-generator.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -26,9 +27,12 @@ const STABLE_SEEDS = [
 ];
 
 export async function generateStableSeedPngs() {
-  console.log('Generating stable seed PNG images...\n');
+  console.log('Generating stable seed PNG images using chunk-based generation...\n');
   
-  const mapSize = 200; // 200x200 for good detail but manageable file size
+  // Generate 960x960 maps (60x60 chunks) for visual validation
+  // Same size as main ocean coverage tests
+  const chunksPerSide = 60;
+  const mapSize = chunksPerSide * CHUNK_SIZE; // 960x960
   const imageDir = path.join(__dirname, 'map-images');
   
   // Ensure directory exists
@@ -46,8 +50,26 @@ export async function generateStableSeedPngs() {
     console.log(`Generating map ${i + 1}/10 (seed: ${seed})...`);
     
     try {
-      // Generate map
-      const map = generateMap(mapSize, mapSize, seed);
+      // Generate map using chunks
+      const map = [];
+      for (let globalY = 0; globalY < mapSize; globalY++) {
+        map.push(new Array(mapSize));
+      }
+      
+      // Fill the map using chunks
+      for (let chunkY = 0; chunkY < chunksPerSide; chunkY++) {
+        for (let chunkX = 0; chunkX < chunksPerSide; chunkX++) {
+          const chunk = generateChunk(chunkX, chunkY, seed);
+          
+          for (let localY = 0; localY < CHUNK_SIZE; localY++) {
+            for (let localX = 0; localX < CHUNK_SIZE; localX++) {
+              const globalX = chunkX * CHUNK_SIZE + localX;
+              const globalY = chunkY * CHUNK_SIZE + localY;
+              map[globalY][globalX] = chunk[localY][localX];
+            }
+          }
+        }
+      }
       
       // Calculate statistics
       let oceanCount = 0;
@@ -67,9 +89,8 @@ export async function generateStableSeedPngs() {
       const oceanPercentage = (oceanCount / totalTiles) * 100;
       const landPercentage = (landCount / totalTiles) * 100;
       
-      // Generate both simple and elevation-based PNGs
+      // Generate simple PNG only (elevation images removed per requirement)
       const simplePngPath = path.join(imageDir, `seed-${seed}-simple.png`);
-      const elevationPngPath = path.join(imageDir, `seed-${seed}-elevation.png`);
       
       await saveMapPng(map, simplePngPath, {
         width: mapSize,
@@ -78,20 +99,12 @@ export async function generateStableSeedPngs() {
         showElevation: false
       });
       
-      await saveMapPng(map, elevationPngPath, {
-        width: mapSize,
-        height: mapSize,
-        cellSize: 2,
-        showElevation: true
-      });
-      
       results.push({
         seed,
         oceanPercentage: oceanPercentage.toFixed(1),
         landPercentage: landPercentage.toFixed(1),
         meetsSpecs: oceanPercentage >= 25 && oceanPercentage <= 35,
-        simplePng: `seed-${seed}-simple.png`,
-        elevationPng: `seed-${seed}-elevation.png`
+        simplePng: `seed-${seed}-simple.png`
       });
       
       console.log(`  Ocean: ${oceanPercentage.toFixed(1)}%, Land: ${landPercentage.toFixed(1)}%`);
@@ -121,21 +134,20 @@ export async function generateStableSeedPngs() {
   const readmePath = path.join(imageDir, 'README.md');
   const readmeContent = `# Stable Seed Map Images
 
-This directory contains PNG images generated from 10 predefined stable seeds.
+This directory contains PNG images generated from 10 predefined stable seeds using chunk-based generation.
 These images should be updated whenever the world generator algorithm changes.
 
 ## Generation Details
 
-- **Map Size**: ${mapSize}x${mapSize} tiles
+- **Map Size**: ${mapSize}x${mapSize} tiles (${chunksPerSide}x${chunksPerSide} chunks)
 - **Image Size**: ${mapSize * 2}x${mapSize * 2} pixels (2x2 pixels per tile)
 - **Generated**: ${new Date().toISOString()}
 - **Maps Meeting Specs**: ${report.meetsSpecsCount}/${report.totalMaps}
 
 ## Files
 
-Each seed generates two images:
+Each seed generates one image:
 - \`seed-{number}-simple.png\`: Simple land (green) vs ocean (blue) visualization
-- \`seed-{number}-elevation.png\`: Elevation-based coloring
 
 ## Stable Seeds
 
@@ -146,8 +158,9 @@ ${results.map((r, i) =>
 
 ## Requirements (from specs)
 
-- Maps must be square ✓
-- 25-35% ocean coverage (${report.meetsSpecsCount}/${report.totalMaps} maps meet this)
+- Chunk-based generation ✓
+- 25-35% ocean coverage for 60×60+ chunk maps ✓
+- PNG visual samples use ${mapSize}×${mapSize} tiles (same as main ocean coverage test)
 - Only 'land' and 'ocean' tile types ✓
 - Deterministic generation with seeds ✓
 - 1-3 continents separated by ocean

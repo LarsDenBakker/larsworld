@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chunk API Test - Simple</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .controls {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: inline-block;
+            width: 120px;
+            font-weight: bold;
+        }
+        
+        input, button {
+            padding: 8px;
+            margin: 2px;
+        }
+        
+        button {
+            background: #007cba;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background: #005a87;
+        }
+        
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        
+        .status.loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        #mapContainer {
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .chunk-grid {
+            display: grid;
+            gap: 2px;
+            margin: 10px auto;
+            border: 1px solid #ccc;
+        }
+        
+        .chunk-tile {
+            width: 4px;
+            height: 4px;
+        }
+        
+        .ocean { background-color: #1e40af; }
+        .land { background-color: #22c55e; }
+    </style>
+</head>
+<body>
+    <h1>🌍 Chunk API Test (Simple)</h1>
+    
+    <div class="controls">
+        <h3>Test Chunk API</h3>
+        
+        <div class="control-group">
+            <label for="seed">Seed:</label>
+            <input type="text" id="seed" value="test-world-123" placeholder="Enter seed...">
+        </div>
+        
+        <div class="control-group">
+            <label for="chunkX">Chunk X:</label>
+            <input type="number" id="chunkX" value="0" step="1">
+        </div>
+        
+        <div class="control-group">
+            <label for="chunkY">Chunk Y:</label>
+            <input type="number" id="chunkY" value="0" step="1">
+        </div>
+        
+        <div class="control-group">
+            <button onclick="testSingleChunk()">Test Single Chunk</button>
+            <button onclick="testMultipleChunks()">Test 3×3 Chunk Grid</button>
+            <button onclick="testDifferentLocations()">Test Different Locations</button>
+        </div>
+    </div>
+    
+    <div id="status"></div>
+    <div id="mapContainer"></div>
+    
+    <script>
+        async function testSingleChunk() {
+            const seed = document.getElementById('seed').value || 'default-seed';
+            const chunkX = parseInt(document.getElementById('chunkX').value) || 0;
+            const chunkY = parseInt(document.getElementById('chunkY').value) || 0;
+            const statusDiv = document.getElementById('status');
+            const mapContainer = document.getElementById('mapContainer');
+            
+            statusDiv.innerHTML = '<div class="status loading">Testing single chunk API...</div>';
+            mapContainer.innerHTML = '';
+            
+            try {
+                const response = await fetch(`/api/chunk?chunkX=${chunkX}&chunkY=${chunkY}&seed=${encodeURIComponent(seed)}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Count tile types
+                    let oceanCount = 0;
+                    let landCount = 0;
+                    
+                    for (const row of data.tiles) {
+                        for (const tile of row) {
+                            if (tile.t === 0) oceanCount++;
+                            else landCount++;
+                        }
+                    }
+                    
+                    const oceanPercent = Math.round(oceanCount / (oceanCount + landCount) * 100);
+                    
+                    statusDiv.innerHTML = `
+                        <div class="status success">
+                            ✅ Single chunk test successful!<br>
+                            Chunk: (${data.chunkX}, ${data.chunkY})<br>
+                            Size: ${Math.round(data.sizeBytes / 1024)}KB<br>
+                            Tiles: ${data.tiles.length}×${data.tiles[0].length}<br>
+                            Ocean: ${oceanPercent}%, Land: ${100-oceanPercent}%
+                        </div>
+                    `;
+                    
+                    // Render the chunk
+                    renderChunk(data, mapContainer);
+                    
+                } else {
+                    statusDiv.innerHTML = `
+                        <div class="status error">
+                            ❌ API Error: ${data.error || 'Unknown error'}
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div class="status error">
+                        ❌ Request failed: ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        async function testMultipleChunks() {
+            const seed = document.getElementById('seed').value || 'default-seed';
+            const centerX = parseInt(document.getElementById('chunkX').value) || 0;
+            const centerY = parseInt(document.getElementById('chunkY').value) || 0;
+            const statusDiv = document.getElementById('status');
+            const mapContainer = document.getElementById('mapContainer');
+            
+            statusDiv.innerHTML = '<div class="status loading">Testing 3×3 chunk grid...</div>';
+            mapContainer.innerHTML = '';
+            
+            try {
+                const chunks = [];
+                let totalSize = 0;
+                
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const chunkX = centerX + dx;
+                        const chunkY = centerY + dy;
+                        
+                        const response = await fetch(`/api/chunk?chunkX=${chunkX}&chunkY=${chunkY}&seed=${encodeURIComponent(seed)}`);
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            chunks.push({ ...data, dx, dy });
+                            totalSize += data.sizeBytes;
+                        } else {
+                            throw new Error(`Chunk (${chunkX}, ${chunkY}): ${data.error}`);
+                        }
+                    }
+                }
+                
+                statusDiv.innerHTML = `
+                    <div class="status success">
+                        ✅ 3×3 chunk grid test successful!<br>
+                        Total chunks: ${chunks.length}<br>
+                        Total size: ${Math.round(totalSize / 1024)}KB<br>
+                        Average size: ${Math.round(totalSize / chunks.length / 1024)}KB per chunk
+                    </div>
+                `;
+                
+                // Render the chunk grid
+                renderChunkGrid(chunks, mapContainer);
+                
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div class="status error">
+                        ❌ Multi-chunk test failed: ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        async function testDifferentLocations() {
+            const seed = document.getElementById('seed').value || 'default-seed';
+            const statusDiv = document.getElementById('status');
+            const mapContainer = document.getElementById('mapContainer');
+            
+            statusDiv.innerHTML = '<div class="status loading">Testing different chunk locations...</div>';
+            mapContainer.innerHTML = '';
+            
+            const testLocations = [
+                { x: 0, y: 0, name: 'Origin' },
+                { x: 10, y: -5, name: 'Northeast' },
+                { x: -3, y: 7, name: 'Southwest' },
+                { x: 100, y: -100, name: 'Far location' },
+                { x: -50, y: 50, name: 'Far negative' }
+            ];
+            
+            try {
+                const results = [];
+                
+                for (const location of testLocations) {
+                    const response = await fetch(`/api/chunk?chunkX=${location.x}&chunkY=${location.y}&seed=${encodeURIComponent(seed)}`);
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        // Count ocean vs land tiles
+                        let oceanCount = 0;
+                        let landCount = 0;
+                        
+                        for (const row of data.tiles) {
+                            for (const tile of row) {
+                                if (tile.t === 0) oceanCount++;
+                                else landCount++;
+                            }
+                        }
+                        
+                        results.push({
+                            location: location.name,
+                            coords: `(${location.x}, ${location.y})`,
+                            size: Math.round(data.sizeBytes / 1024),
+                            oceanPercent: Math.round(oceanCount / (oceanCount + landCount) * 100)
+                        });
+                    } else {
+                        results.push({
+                            location: location.name,
+                            coords: `(${location.x}, ${location.y})`,
+                            error: data.error
+                        });
+                    }
+                }
+                
+                const resultHtml = results.map(r => 
+                    r.error 
+                        ? `${r.location} ${r.coords}: ERROR - ${r.error}`
+                        : `${r.location} ${r.coords}: ${r.size}KB, ${r.oceanPercent}% ocean`
+                ).join('<br>');
+                
+                statusDiv.innerHTML = `
+                    <div class="status success">
+                        ✅ Location test results:<br>
+                        ${resultHtml}
+                    </div>
+                `;
+                
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div class="status error">
+                        ❌ Location test failed: ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        function renderChunk(chunkData, container) {
+            const chunkDiv = document.createElement('div');
+            chunkDiv.innerHTML = `<h4>Chunk (${chunkData.chunkX}, ${chunkData.chunkY})</h4>`;
+            
+            const grid = document.createElement('div');
+            grid.className = 'chunk-grid';
+            grid.style.gridTemplateColumns = `repeat(16, 4px)`;
+            
+            for (const row of chunkData.tiles) {
+                for (const tile of row) {
+                    const tileDiv = document.createElement('div');
+                    tileDiv.className = `chunk-tile ${tile.t === 0 ? 'ocean' : 'land'}`;
+                    grid.appendChild(tileDiv);
+                }
+            }
+            
+            chunkDiv.appendChild(grid);
+            container.appendChild(chunkDiv);
+        }
+        
+        function renderChunkGrid(chunks, container) {
+            const gridDiv = document.createElement('div');
+            gridDiv.innerHTML = '<h4>3×3 Chunk Grid</h4>';
+            
+            // Sort chunks by position
+            chunks.sort((a, b) => a.dy === b.dy ? a.dx - b.dx : a.dy - b.dy);
+            
+            const bigGrid = document.createElement('div');
+            bigGrid.className = 'chunk-grid';
+            bigGrid.style.gridTemplateColumns = `repeat(48, 2px)`; // 3 chunks × 16 tiles each
+            
+            // Create a 48×48 grid (3×3 chunks of 16×16 each)
+            const tileGrid = Array(48).fill().map(() => Array(48).fill('ocean'));
+            
+            for (const chunk of chunks) {
+                const startX = (chunk.dx + 1) * 16; // +1 because dx is -1,0,1
+                const startY = (chunk.dy + 1) * 16;
+                
+                for (let y = 0; y < 16; y++) {
+                    for (let x = 0; x < 16; x++) {
+                        const tile = chunk.tiles[y][x];
+                        tileGrid[startY + y][startX + x] = tile.t === 0 ? 'ocean' : 'land';
+                    }
+                }
+            }
+            
+            // Render the combined grid
+            for (let y = 0; y < 48; y++) {
+                for (let x = 0; x < 48; x++) {
+                    const tileDiv = document.createElement('div');
+                    tileDiv.className = `chunk-tile ${tileGrid[y][x]}`;
+                    tileDiv.style.width = '2px';
+                    tileDiv.style.height = '2px';
+                    bigGrid.appendChild(tileDiv);
+                }
+            }
+            
+            gridDiv.appendChild(bigGrid);
+            container.appendChild(gridDiv);
+        }
+    </script>
+</body>
+</html>

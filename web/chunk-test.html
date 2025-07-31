@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chunk-Based World Generator Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .controls {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: inline-block;
+            width: 120px;
+            font-weight: bold;
+        }
+        
+        input, button {
+            padding: 8px;
+            margin: 2px;
+        }
+        
+        button {
+            background: #007cba;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background: #005a87;
+        }
+        
+        .info {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        #mapContainer {
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            min-height: 200px;
+        }
+        
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        
+        .status.loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>🌍 Chunk-Based World Generator Test</h1>
+    
+    <div class="info">
+        <h3>About Chunk-Based Generation</h3>
+        <p>This interface tests the new chunk-based world generation system. Each chunk is 16×16 tiles and can be fetched independently, allowing for unlimited map growth in any direction.</p>
+        <ul>
+            <li><strong>Chunk Size:</strong> 16×16 tiles per chunk</li>
+            <li><strong>View Radius:</strong> Number of chunks to load around the center</li>
+            <li><strong>Deterministic:</strong> Same seed and coordinates always produce the same chunk</li>
+            <li><strong>Size Limit:</strong> Stays under 6MB with up to 5 parallel requests</li>
+        </ul>
+    </div>
+    
+    <div class="controls">
+        <h3>Generation Controls</h3>
+        
+        <div class="control-group">
+            <label for="seed">Seed:</label>
+            <input type="text" id="seed" value="test-world-123" placeholder="Enter seed...">
+        </div>
+        
+        <div class="control-group">
+            <label for="centerX">Center Chunk X:</label>
+            <input type="number" id="centerX" value="0" step="1">
+        </div>
+        
+        <div class="control-group">
+            <label for="centerY">Center Chunk Y:</label>
+            <input type="number" id="centerY" value="0" step="1">
+        </div>
+        
+        <div class="control-group">
+            <label for="radius">View Radius:</label>
+            <input type="number" id="radius" value="3" min="1" max="10" step="1">
+            <small>(radius 3 = 7×7 chunks = 112×112 tiles)</small>
+        </div>
+        
+        <div class="control-group">
+            <button onclick="generateChunkMap()">Generate Chunk-Based Map</button>
+            <button onclick="testSingleChunk()">Test Single Chunk</button>
+            <button onclick="testDifferentLocations()">Test Different Locations</button>
+        </div>
+    </div>
+    
+    <div id="status"></div>
+    <div id="mapContainer">
+        <p>Click "Generate Chunk-Based Map" to start testing...</p>
+    </div>
+    
+    <script type="module">
+        // Import the chunk-based map generation function
+        import { generateChunkBasedMap, calculateChunkArea } from '../src/client/chunk-map.js';
+        
+        window.generateChunkMap = async function() {
+            const seed = document.getElementById('seed').value || 'default-seed';
+            const centerX = parseInt(document.getElementById('centerX').value) || 0;
+            const centerY = parseInt(document.getElementById('centerY').value) || 0;
+            const radius = parseInt(document.getElementById('radius').value) || 3;
+            
+            const container = document.getElementById('mapContainer');
+            const statusDiv = document.getElementById('status');
+            
+            // Show info about what we're generating
+            const areaInfo = calculateChunkArea(radius);
+            statusDiv.innerHTML = `
+                <div class="status loading">
+                    Generating ${areaInfo.chunksPerSide}×${areaInfo.chunksPerSide} chunks 
+                    (${areaInfo.totalChunks} total chunks, ${areaInfo.tilesPerSide}×${areaInfo.tilesPerSide} tiles)
+                    <br>Estimated size: ${Math.round(areaInfo.estimatedSize / 1024)}KB
+                </div>
+            `;
+            
+            try {
+                await generateChunkBasedMap({
+                    seed,
+                    centerChunkX: centerX,
+                    centerChunkY: centerY,
+                    viewRadius: radius,
+                    onProgress: (loaded, total) => {
+                        statusDiv.innerHTML = `
+                            <div class="status loading">
+                                Loading chunks: ${loaded}/${total} (${Math.round(loaded/total*100)}%)
+                            </div>
+                        `;
+                    },
+                    onComplete: (totalChunks) => {
+                        statusDiv.innerHTML = `
+                            <div class="status success">
+                                ✅ Successfully generated ${totalChunks} chunks!
+                            </div>
+                        `;
+                    },
+                    onError: (error) => {
+                        statusDiv.innerHTML = `
+                            <div class="status error">
+                                ❌ Error: ${error.message}
+                            </div>
+                        `;
+                    }
+                }, container);
+                
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div class="status error">
+                        ❌ Failed to generate map: ${error.message}
+                    </div>
+                `;
+            }
+        };
+        
+        window.testSingleChunk = async function() {
+            const seed = document.getElementById('seed').value || 'default-seed';
+            const centerX = parseInt(document.getElementById('centerX').value) || 0;
+            const centerY = parseInt(document.getElementById('centerY').value) || 0;
+            const statusDiv = document.getElementById('status');
+            
+            statusDiv.innerHTML = '<div class="status loading">Testing single chunk API...</div>';
+            
+            try {
+                const response = await fetch(`/api/chunk?chunkX=${centerX}&chunkY=${centerY}&seed=${encodeURIComponent(seed)}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    statusDiv.innerHTML = `
+                        <div class="status success">
+                            ✅ Single chunk test successful!<br>
+                            Chunk: (${data.chunkX}, ${data.chunkY})<br>
+                            Size: ${Math.round(data.sizeBytes / 1024)}KB<br>
+                            Tiles: ${data.tiles.length}×${data.tiles[0].length}
+                        </div>
+                    `;
+                } else {
+                    statusDiv.innerHTML = `
+                        <div class="status error">
+                            ❌ API Error: ${data.error || 'Unknown error'}
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div class="status error">
+                        ❌ Request failed: ${error.message}
+                    </div>
+                `;
+            }
+        };
+        
+        window.testDifferentLocations = async function() {
+            const seed = document.getElementById('seed').value || 'default-seed';
+            const statusDiv = document.getElementById('status');
+            
+            statusDiv.innerHTML = '<div class="status loading">Testing different chunk locations...</div>';
+            
+            const testLocations = [
+                { x: 0, y: 0, name: 'Origin' },
+                { x: 10, y: -5, name: 'Northeast' },
+                { x: -3, y: 7, name: 'Southwest' },
+                { x: 100, y: -100, name: 'Far location' }
+            ];
+            
+            try {
+                const results = [];
+                
+                for (const location of testLocations) {
+                    const response = await fetch(`/api/chunk?chunkX=${location.x}&chunkY=${location.y}&seed=${encodeURIComponent(seed)}`);
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        // Count ocean vs land tiles
+                        let oceanCount = 0;
+                        let landCount = 0;
+                        
+                        for (const row of data.tiles) {
+                            for (const tile of row) {
+                                if (tile.t === 0) oceanCount++;
+                                else landCount++;
+                            }
+                        }
+                        
+                        results.push({
+                            location: location.name,
+                            coords: `(${location.x}, ${location.y})`,
+                            size: Math.round(data.sizeBytes / 1024),
+                            oceanPercent: Math.round(oceanCount / (oceanCount + landCount) * 100)
+                        });
+                    } else {
+                        results.push({
+                            location: location.name,
+                            coords: `(${location.x}, ${location.y})`,
+                            error: data.error
+                        });
+                    }
+                }
+                
+                const resultHtml = results.map(r => 
+                    r.error 
+                        ? `${r.location} ${r.coords}: ERROR - ${r.error}`
+                        : `${r.location} ${r.coords}: ${r.size}KB, ${r.oceanPercent}% ocean`
+                ).join('<br>');
+                
+                statusDiv.innerHTML = `
+                    <div class="status success">
+                        ✅ Location test results:<br>
+                        ${resultHtml}
+                    </div>
+                `;
+                
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div class="status error">
+                        ❌ Location test failed: ${error.message}
+                    </div>
+                `;
+            }
+        };
+        
+        // Auto-update area info when radius changes
+        document.getElementById('radius').addEventListener('input', function() {
+            const radius = parseInt(this.value) || 3;
+            const areaInfo = calculateChunkArea(radius);
+            const small = this.parentNode.querySelector('small');
+            small.textContent = `(radius ${radius} = ${areaInfo.chunksPerSide}×${areaInfo.chunksPerSide} chunks = ${areaInfo.tilesPerSide}×${areaInfo.tilesPerSide} tiles, ~${Math.round(areaInfo.estimatedSize / 1024)}KB)`;
+        });
+    </script>
+</body>
+</html>

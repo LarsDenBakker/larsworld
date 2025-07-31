@@ -3,7 +3,7 @@
  * Tests only the requirements specified in specs/world-generator.md
  * Updated for chunk-based generation only - legacy map generation removed
  */
-import { generateChunk, generateMapChunk, validateMapChunkRequest } from '../dist/src/map-generator/index.js';
+import { generateChunk, generateMapChunk, validateMapChunkRequest, benchmarkChunkGeneration, clearGenerationCaches } from '../dist/src/map-generator/index.js';
 import { CHUNK_SIZE } from '../dist/src/shared/types.js';
 import { generateStableSeedPngs } from './stable-seed-pngs.js';
 
@@ -573,6 +573,91 @@ function testChunkOceanCoverage() {
 }
 
 /**
+ * Test map generation performance for 60x60 chunks
+ */
+function testMapGenerationPerformance() {
+  try {
+    console.log('Testing map generation performance...');
+    
+    // Test single chunk performance
+    const singleChunkStart = performance.now();
+    const chunk = generateChunk(0, 0, 12345);
+    const singleChunkTime = performance.now() - singleChunkStart;
+    
+    console.log(`  Single chunk: ${singleChunkTime.toFixed(2)}ms`);
+    
+    // Test 60x60 chunk grid performance (the main performance requirement)
+    clearGenerationCaches(); // Start fresh
+    
+    const chunksPerSide = 60;
+    const totalChunks = chunksPerSide * chunksPerSide; // 3,600 chunks
+    const totalTiles = totalChunks * CHUNK_SIZE * CHUNK_SIZE; // 921,600 tiles
+    
+    console.log(`  Generating 60x60 chunks (${totalChunks.toLocaleString()} chunks, ${totalTiles.toLocaleString()} tiles)...`);
+    
+    const startTime = performance.now();
+    let chunksGenerated = 0;
+    
+    // Generate all chunks in 60x60 grid
+    for (let chunkY = 0; chunkY < chunksPerSide; chunkY++) {
+      for (let chunkX = 0; chunkX < chunksPerSide; chunkX++) {
+        generateChunk(chunkX, chunkY, 12345);
+        chunksGenerated++;
+      }
+      
+      // Progress reporting every 10 rows
+      if ((chunkY + 1) % 10 === 0) {
+        const progress = ((chunkY + 1) / chunksPerSide) * 100;
+        const currentTime = performance.now() - startTime;
+        console.log(`    Progress: ${progress.toFixed(0)}% (${(currentTime/1000).toFixed(1)}s)`);
+      }
+    }
+    
+    const totalTime = performance.now() - startTime;
+    const chunksPerSecond = (chunksGenerated / totalTime) * 1000;
+    const tilesPerSecond = (totalTiles / totalTime) * 1000;
+    
+    console.log(`  Results:`);
+    console.log(`    Total time: ${(totalTime/1000).toFixed(2)} seconds`);
+    console.log(`    Chunks/sec: ${chunksPerSecond.toFixed(1)}`);
+    console.log(`    Tiles/sec: ${tilesPerSecond.toLocaleString()}`);
+    
+    // Performance requirements: 60x60 chunks should generate in under 30 seconds
+    const targetTime = 30; // seconds
+    const meetsPerformanceTarget = totalTime < (targetTime * 1000);
+    
+    // Additional requirement: single chunk should be under 50ms for good UX
+    const singleChunkTarget = 50; // milliseconds
+    const meetsSingleChunkTarget = singleChunkTime < singleChunkTarget;
+    
+    const overallPassed = meetsPerformanceTarget && meetsSingleChunkTarget;
+    
+    return {
+      name: 'Map Generation Performance',
+      passed: overallPassed,
+      message: overallPassed 
+        ? `Performance targets met: 60x60 in ${(totalTime/1000).toFixed(2)}s (target: ${targetTime}s), single chunk in ${singleChunkTime.toFixed(2)}ms (target: ${singleChunkTarget}ms)`
+        : `Performance targets missed: 60x60 in ${(totalTime/1000).toFixed(2)}s (target: ${targetTime}s), single chunk in ${singleChunkTime.toFixed(2)}ms (target: ${singleChunkTarget}ms)`,
+      details: {
+        singleChunkTime: singleChunkTime.toFixed(2) + 'ms',
+        totalTime: (totalTime/1000).toFixed(2) + 's',
+        chunksPerSecond: chunksPerSecond.toFixed(1),
+        tilesPerSecond: tilesPerSecond.toLocaleString(),
+        targetTime: targetTime + 's',
+        singleChunkTarget: singleChunkTarget + 'ms',
+        meetsPerformanceTarget,
+        meetsSingleChunkTarget
+      }
+    };
+  } catch (error) {
+    return {
+      name: 'Map Generation Performance',
+      passed: false,
+      message: `Error: ${error.message}`
+    };
+  }
+}
+/**
  * Test stable seed PNG generation and integrate it into main test suite
  */
 async function testStableSeedPngs() {
@@ -604,6 +689,7 @@ async function runAllTests() {
     testTileTypes,
     testDeterministicGeneration,
     testRiverGeneration,
+    testMapGenerationPerformance,
     testOceanCoverage60x60,
     testMapRealism,
     testChunkBasedGeneration,

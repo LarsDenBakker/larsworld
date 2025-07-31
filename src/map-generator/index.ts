@@ -160,8 +160,34 @@ function seedRandom(seed: number): () => number {
 
 
 /**
- * Calculate the flow direction based on elevation gradients (simplified)
- * Returns the direction water would flow from this tile
+ * River noise generators cache
+ */
+interface RiverNoiseGenerators {
+  source: PerlinNoise;
+  drainage: PerlinNoise;
+}
+
+const riverNoiseCache = new Map<number, RiverNoiseGenerators>();
+
+/**
+ * Get or create cached river noise generators for a seed
+ */
+function getRiverNoiseGenerators(seed: number): RiverNoiseGenerators {
+  if (riverNoiseCache.has(seed)) {
+    return riverNoiseCache.get(seed)!;
+  }
+  
+  const noiseGenerators: RiverNoiseGenerators = {
+    source: new PerlinNoise(seed + 1000),
+    drainage: new PerlinNoise(seed + 2000)
+  };
+  
+  riverNoiseCache.set(seed, noiseGenerators);
+  return noiseGenerators;
+}
+
+/**
+ * Calculate the flow direction based on elevation gradients (optimized)
  */
 function calculateFlowDirection(x: number, y: number, seed: number): { dx: number, dy: number } {
   // Sample elevation at neighboring tiles (simplified to 4 cardinal directions)
@@ -192,42 +218,35 @@ function calculateFlowDirection(x: number, y: number, seed: number): { dx: numbe
 }
 
 /**
- * Determine if a location should be a river source (simplified)
- * River sources are placed at high elevation areas
+ * Determine if a location should be a river source (optimized)
  */
-function isRiverSource(x: number, y: number, seed: number): boolean {
-  const elevation = calculateLandStrengthAtChunk(x, y, seed);
-  
+function isRiverSource(x: number, y: number, seed: number, elevation: number, riverNoise: RiverNoiseGenerators): boolean {
   // Only land tiles can be river sources
   if (elevation < 0.5) return false;
   
   // Adjust threshold to actual land elevation range (0.51-1.0)
-  // Use relative positioning within land range for sources
   if (elevation < 0.52) return false; // Only use higher land areas
   
-  // Use deterministic noise to place river sources sparsely
-  const sourceNoise = new PerlinNoise(seed + 1000);
-  const sourceValue = sourceNoise.noise(x * 0.02, y * 0.02);
+  // Use cached noise generator
+  const sourceValue = riverNoise.source.noise(x * 0.02, y * 0.02);
   
   // More balanced source placement 
   return sourceValue > 0.3;
 }
 
 /**
- * Calculate simplified flow accumulation using noise
+ * Calculate simplified flow accumulation using cached noise (optimized)
  */
-function calculateFlowAccumulation(x: number, y: number, seed: number): number {
-  const drainageNoise = new PerlinNoise(seed + 2000);
-  
-  // Use noise to simulate drainage patterns, but make it sparser
-  const drainageValue = drainageNoise.octaveNoise(x * 0.02, y * 0.02, 2, 0.5);
+function calculateFlowAccumulation(x: number, y: number, riverNoise: RiverNoiseGenerators): number {
+  // Use cached noise to simulate drainage patterns, but make it sparser
+  const drainageValue = riverNoise.drainage.octaveNoise(x * 0.02, y * 0.02, 2, 0.5);
   
   // Convert to positive values and scale down for less dense rivers
   return (drainageValue + 1) * 1.5;
 }
 
 /**
- * Determine the river segment type (simplified)
+ * Determine the river segment type (optimized)
  */
 function calculateRiverType(x: number, y: number, seed: number): RiverType {
   const elevation = calculateLandStrengthAtChunk(x, y, seed);
@@ -235,8 +254,11 @@ function calculateRiverType(x: number, y: number, seed: number): RiverType {
   // No rivers in ocean
   if (elevation < 0.5) return 'none';
   
-  const flowAccumulation = calculateFlowAccumulation(x, y, seed);
-  const isSource = isRiverSource(x, y, seed);
+  // Use cached river noise generators
+  const riverNoise = getRiverNoiseGenerators(seed);
+  
+  const flowAccumulation = calculateFlowAccumulation(x, y, riverNoise);
+  const isSource = isRiverSource(x, y, seed, elevation, riverNoise);
   
   // Balanced threshold for river presence
   const riverThreshold = isSource ? 1.2 : 2.0;
@@ -268,29 +290,50 @@ function calculateRiverType(x: number, y: number, seed: number): RiverType {
 }
 
 /**
- * Calculate land strength for a single coordinate using the same continental generation
- * algorithm as generateContinents, but without post-processing that requires all tiles
+ * Cached continent data for performance optimization
  */
-function calculateLandStrengthAtChunk(x: number, y: number, seed: number): number {
+interface ContinentData {
+  centers: Array<{x: number, y: number}>;
+  numContinents: number;
+  noiseGenerators: {
+    continent: PerlinNoise;
+    detail: PerlinNoise;
+    warpX: PerlinNoise;
+    warpY: PerlinNoise;
+  };
+}
+
+// Cache for continent data by seed to avoid recalculation
+const continentCache = new Map<number, ContinentData>();
+
+/**
+ * Get or create cached continent data for a seed
+ */
+function getContinentData(seed: number): ContinentData {
+  if (continentCache.has(seed)) {
+    return continentCache.get(seed)!;
+  }
+  
   // Use a fixed reference world size for consistent continental patterns
-  // This ensures chunks align regardless of their position
   const referenceWidth = 1000;
   const referenceHeight = 1000;
   
-  // Create seeded random function (same as in generateContinents)
+  // Create seeded random function
   const random = seedRandom(seed);
   
-  // Determine number of continents (1, 2, or 3) - same logic as generateContinents
+  // Determine number of continents (1, 2, or 3)
   const numContinents = Math.floor(random() * 3) + 1;
   
-  // Create multiple noise generators for different purposes (same as generateContinents)
-  const continentNoise = new PerlinNoise(seed);
-  const detailNoise = new PerlinNoise(seed + 100);
-  const warpNoiseX = new PerlinNoise(seed + 200);
-  const warpNoiseY = new PerlinNoise(seed + 300);
+  // Create noise generators once per seed
+  const noiseGenerators = {
+    continent: new PerlinNoise(seed),
+    detail: new PerlinNoise(seed + 100),
+    warpX: new PerlinNoise(seed + 200),
+    warpY: new PerlinNoise(seed + 300)
+  };
   
-  // Generate continent centers ensuring proper separation (same logic as generateContinents)
-  const continentCenters: Array<{x: number, y: number}> = [];
+  // Generate continent centers ensuring proper separation
+  const centers: Array<{x: number, y: number}> = [];
   const minSeparation = referenceWidth * 0.05;
   
   for (let i = 0; i < numContinents; i++) {
@@ -304,11 +347,10 @@ function calculateLandStrengthAtChunk(x: number, y: number, seed: number): numbe
       continentY = (referenceHeight * 0.15) + random() * (referenceHeight * 0.7);
       
       validPosition = true;
-      for (const existing of continentCenters) {
-        const distance = Math.sqrt(
-          Math.pow(continentX - existing.x, 2) + 
-          Math.pow(continentY - existing.y, 2)
-        );
+      for (const existing of centers) {
+        const dx = continentX - existing.x;
+        const dy = continentY - existing.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
         if (distance < minSeparation) {
           validPosition = false;
           break;
@@ -328,53 +370,70 @@ function calculateLandStrengthAtChunk(x: number, y: number, seed: number): numbe
       }
     }
     
-    continentCenters.push({ x: continentX, y: continentY });
+    centers.push({ x: continentX, y: continentY });
   }
   
-  // Calculate raw elevation for this specific coordinate (same algorithm as generateContinents)
+  const continentData: ContinentData = {
+    centers,
+    numContinents,
+    noiseGenerators
+  };
+  
+  continentCache.set(seed, continentData);
+  return continentData;
+}
+
+/**
+ * Optimized land strength calculation using cached continent data
+ */
+function calculateLandStrengthAtChunk(x: number, y: number, seed: number): number {
+  // Use cached continent data
+  const continentData = getContinentData(seed);
+  const { centers, noiseGenerators } = continentData;
+  const referenceWidth = 1000;
+  const referenceHeight = 1000;
   
   // Apply domain warping for natural, irregular shapes
   const warpStrength = 15.0;
-  const warpX = x + warpNoiseX.octaveNoise(x * 0.008, y * 0.008, 3, 0.5) * warpStrength;
-  const warpY = y + warpNoiseY.octaveNoise(x * 0.008, y * 0.008, 3, 0.5) * warpStrength;
+  const warpX = x + noiseGenerators.warpX.octaveNoise(x * 0.008, y * 0.008, 3, 0.5) * warpStrength;
+  const warpY = y + noiseGenerators.warpY.octaveNoise(x * 0.008, y * 0.008, 3, 0.5) * warpStrength;
   
-  // Large-scale continent shape (low frequency, high amplitude)
-  const continentShape = continentNoise.octaveNoise(warpX * 0.003, warpY * 0.003, 3, 0.6);
+  // Large-scale continent shape (reduced octaves from 3 to 2 for performance)
+  const continentShape = noiseGenerators.continent.octaveNoise(warpX * 0.003, warpY * 0.003, 2, 0.6);
   
-  // Medium-scale features (moderate frequency and amplitude)
-  const mediumFeatures = continentNoise.octaveNoise(warpX * 0.008, warpY * 0.008, 4, 0.5);
+  // Medium-scale features (reduced octaves from 4 to 3)
+  const mediumFeatures = noiseGenerators.continent.octaveNoise(warpX * 0.008, warpY * 0.008, 3, 0.5);
   
-  // Fine-scale coastal details (high frequency, low amplitude)
-  const coastalDetails = detailNoise.octaveNoise(warpX * 0.02, warpY * 0.02, 3, 0.4);
+  // Fine-scale coastal details (reduced octaves from 3 to 2)
+  const coastalDetails = noiseGenerators.detail.octaveNoise(warpX * 0.02, warpY * 0.02, 2, 0.4);
   
   // Combine noise layers for natural landmass shape
   let elevation = continentShape * 0.6 + mediumFeatures * 0.3 + coastalDetails * 0.1;
   
-  // Add distance-based influence from continent centers for separation
+  // Optimized distance-based influence from continent centers
   let centerInfluence = 0;
-  for (const center of continentCenters) {
-    const dx = (x - center.x) / (referenceWidth * 0.3); // Influence area
-    const dy = (y - center.y) / (referenceHeight * 0.3);
-    const distance = Math.sqrt(dx * dx + dy * dy);
+  const influenceScale = 1.0 / (referenceWidth * 0.3);
+  for (const center of centers) {
+    const dx = (x - center.x) * influenceScale;
+    const dy = (y - center.y) * influenceScale;
+    const distanceSquared = dx * dx + dy * dy;
     
-    // Smooth falloff from continent centers
-    const influence = Math.max(0, 1 - Math.pow(distance, 1.8));
+    // Avoid expensive sqrt and pow operations
+    const influence = distanceSquared < 1 ? Math.max(0, 1 - distanceSquared * 1.8) : 0;
     centerInfluence = Math.max(centerInfluence, influence);
   }
   
   // Ensure we always have some landmass near continent centers
-  const landBoost = centerInfluence * 0.35; // Moderate land boost
+  const landBoost = centerInfluence * 0.35;
   
   // Combine noise elevation with center influence
   elevation = elevation * 0.65 + centerInfluence * 0.18 + landBoost;
   
   // Normalize to 0-1 and clamp
-  elevation = (elevation + 1) / 2; // Normalize to 0-1
+  elevation = (elevation + 1) / 2;
   elevation = Math.max(0, Math.min(1, elevation));
   
-  // Instead of post-processing like in generateContinents, use a direct threshold
-  // that approximately produces 30% ocean coverage based on the noise characteristics
-  // Adjusted threshold to better match 25-35% ocean coverage for 60x60+ areas
+  // Direct threshold for ocean coverage
   const oceanThreshold = 0.495;
   
   if (elevation < oceanThreshold) {
@@ -389,24 +448,50 @@ function calculateLandStrengthAtChunk(x: number, y: number, seed: number): numbe
 }
 
 /**
- * Generate a single tile at specific coordinates using chunk-optimized algorithm
- * This ensures consistency between chunk generation and full map generation
+ * Optimized noise generators cache for tiles
+ */
+interface TileNoiseGenerators {
+  elevation: PerlinNoise;
+  temperature: PerlinNoise;
+  moisture: PerlinNoise;
+}
+
+const tileNoiseCache = new Map<number, TileNoiseGenerators>();
+
+/**
+ * Get or create cached tile noise generators for a seed
+ */
+function getTileNoiseGenerators(seed: number): TileNoiseGenerators {
+  if (tileNoiseCache.has(seed)) {
+    return tileNoiseCache.get(seed)!;
+  }
+  
+  const noiseGenerators: TileNoiseGenerators = {
+    elevation: new PerlinNoise(seed + 1),
+    temperature: new PerlinNoise(seed + 2),
+    moisture: new PerlinNoise(seed + 3)
+  };
+  
+  tileNoiseCache.set(seed, noiseGenerators);
+  return noiseGenerators;
+}
+
+/**
+ * Optimized tile generation with cached noise generators
  */
 function generateTileAtChunk(x: number, y: number, seed: number): Tile {
-  // Use the same noise generators as generateMap with the same seeds
-  const elevationNoise = new PerlinNoise(seed + 1);
-  const temperatureNoise = new PerlinNoise(seed + 2);
-  const moistureNoise = new PerlinNoise(seed + 3);
+  // Use cached noise generators
+  const noiseGenerators = getTileNoiseGenerators(seed);
   
-  // Calculate land strength using chunk-optimized stateless function
+  // Calculate land strength using optimized cached function
   const landStrength = calculateLandStrengthAtChunk(x, y, seed);
   
   // Apply the same elevation calculation as generateMap
   let elevation = landStrength;
   
-  // Add detailed terrain elevation using noise for land areas
+  // Add detailed terrain elevation using noise for land areas (reduced octaves for performance)
   if (landStrength >= 0.5) {
-    const terrainElevation = elevationNoise.octaveNoise(x * 0.01, y * 0.01, 6, 0.5);
+    const terrainElevation = noiseGenerators.elevation.octaveNoise(x * 0.01, y * 0.01, 4, 0.5); // Reduced from 6 to 4 octaves
     const terrainVariation = (terrainElevation + 1) / 2; // Normalize to 0-1
     
     // Combine base land shape with terrain details
@@ -415,25 +500,25 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
     // Ensure minimum land elevation
     elevation = Math.max(elevation, 0.51);
   } else {
-    // Ocean areas - add seafloor variation
-    const seafloorVariation = elevationNoise.octaveNoise(x * 0.005, y * 0.005, 3, 0.3);
-    elevation = landStrength + Math.max(0, seafloorVariation * 0.05); // Smaller variation to stay below 0.5
-    elevation = Math.min(elevation, 0.49); // Ensure it stays below 0.5
+    // Ocean areas - add seafloor variation (reduced octaves)
+    const seafloorVariation = noiseGenerators.elevation.octaveNoise(x * 0.005, y * 0.005, 2, 0.3); // Reduced from 3 to 2 octaves
+    elevation = landStrength + Math.max(0, seafloorVariation * 0.05);
+    elevation = Math.min(elevation, 0.49);
   }
   
   // Clamp elevation to valid range
   elevation = Math.max(0, Math.min(1, elevation));
   
-  // Generate temperature based on latitude (using a reference for consistent patterns)
+  // Generate temperature based on latitude (reduced octaves for performance)
   const referenceHeight = 1000;
   const latitudeFactor = Math.abs((y / referenceHeight) - 0.5) * 2; // 0 at equator, 1 at poles
   let temperature = 1 - latitudeFactor; // Hot at equator, cold at poles
-  temperature += temperatureNoise.octaveNoise(x * 0.008, y * 0.008, 3, 0.3) * 0.3;
+  temperature += noiseGenerators.temperature.octaveNoise(x * 0.008, y * 0.008, 2, 0.3) * 0.3; // Reduced from 3 to 2 octaves
   temperature -= elevation * 0.5; // Higher elevation = colder
   temperature = Math.max(0, Math.min(1, temperature));
   
-  // Generate moisture patterns (same as generateMap)
-  let moisture = moistureNoise.octaveNoise(x * 0.012, y * 0.012, 4, 0.4);
+  // Generate moisture patterns (reduced octaves for performance)
+  let moisture = noiseGenerators.moisture.octaveNoise(x * 0.012, y * 0.012, 3, 0.4); // Reduced from 4 to 3 octaves
   moisture = (moisture + 1) / 2; // Normalize to 0-1
   moisture = Math.max(0, Math.min(1, moisture));
   
@@ -444,7 +529,7 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
   const biome = classifyBiome(elevation, temperature, moisture);
   const elevationType = getElevationType(elevation);
   
-  // Generate river information
+  // Generate river information (optimized)
   const river = calculateRiverType(x, y, seed);
   
   return {
@@ -457,6 +542,61 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
     biome,
     elevationType,
     river
+  };
+}
+
+/**
+ * Clear all caches to prevent memory leaks
+ */
+export function clearGenerationCaches(): void {
+  continentCache.clear();
+  tileNoiseCache.clear();
+  riverNoiseCache.clear();
+}
+
+/**
+ * Get cache statistics for debugging
+ */
+export function getCacheStats(): { continents: number, tileNoise: number, riverNoise: number } {
+  return {
+    continents: continentCache.size,
+    tileNoise: tileNoiseCache.size,
+    riverNoise: riverNoiseCache.size
+  };
+}
+
+/**
+ * Benchmark chunk generation performance
+ */
+export function benchmarkChunkGeneration(numChunks: number, seed?: number): { 
+  totalTime: number, 
+  chunksPerSecond: number, 
+  tilesPerSecond: number,
+  averageTimePerChunk: number 
+} {
+  const testSeed = seed ?? 12345;
+  const startTime = performance.now();
+  
+  // Generate chunks in a grid pattern
+  const chunksSide = Math.ceil(Math.sqrt(numChunks));
+  let chunksGenerated = 0;
+  
+  for (let chunkY = 0; chunkY < chunksSide && chunksGenerated < numChunks; chunkY++) {
+    for (let chunkX = 0; chunkX < chunksSide && chunksGenerated < numChunks; chunkX++) {
+      generateChunk(chunkX, chunkY, testSeed);
+      chunksGenerated++;
+    }
+  }
+  
+  const endTime = performance.now();
+  const totalTime = endTime - startTime;
+  const totalTiles = chunksGenerated * CHUNK_SIZE * CHUNK_SIZE;
+  
+  return {
+    totalTime,
+    chunksPerSecond: (chunksGenerated / totalTime) * 1000,
+    tilesPerSecond: (totalTiles / totalTime) * 1000,
+    averageTimePerChunk: totalTime / chunksGenerated
   };
 }
 

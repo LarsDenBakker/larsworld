@@ -1,5 +1,15 @@
 import { LitElement, html, css } from 'lit';
 
+interface ChunkData {
+  [key: number]: {
+    biome: string;
+    elevation: number;
+  };
+}
+
+type BiomeKey = 'deep_ocean' | 'shallow_ocean' | 'desert' | 'tundra' | 'arctic' | 'swamp' | 
+               'grassland' | 'forest' | 'taiga' | 'savanna' | 'tropical_forest' | 'alpine';
+
 /**
  * World map canvas component for rendering chunks
  */
@@ -10,6 +20,18 @@ export class WorldMap extends LitElement {
     chunkSize: { type: Number },
     tileSize: { type: Number }
   };
+
+  canvas!: HTMLCanvasElement;
+
+  private context: CanvasRenderingContext2D | null = null;
+
+  constructor() {
+    super();
+    this.chunks = new Map();
+    this.isGenerating = false;
+    this.chunkSize = 16;
+    this.tileSize = 4;
+  }
 
   static styles = css`
     :host {
@@ -69,7 +91,7 @@ export class WorldMap extends LitElement {
     }
   `;
 
-  static BIOME_COLORS = {
+  static readonly BIOME_COLORS: Record<BiomeKey, string> = {
     deep_ocean: '#4169e1',
     shallow_ocean: '#6496e6',
     desert: '#eecbad',
@@ -84,30 +106,20 @@ export class WorldMap extends LitElement {
     alpine: '#a9a9a9'
   };
 
-  constructor() {
-    super();
-    this.chunks = new Map();
-    this.isGenerating = false;
-    this.chunkSize = 16;
-    this.tileSize = 4;
-    this.canvas = null;
-    this.context = null;
-  }
-
   firstUpdated() {
-    this.canvas = this.shadowRoot.querySelector('canvas');
+    this.canvas = this.shadowRoot!.querySelector('canvas')!;
     if (this.canvas) {
       this.context = this.canvas.getContext('2d');
     }
   }
 
-  updated(changedProperties) {
+  updated(changedProperties: Map<string | number | symbol, unknown>) {
     if (changedProperties.has('chunks') && this.chunks.size > 0) {
       this._renderMap();
     }
   }
 
-  setMapSize(minX, maxX, minY, maxY) {
+  setMapSize(minX: number, maxX: number, minY: number, maxY: number) {
     if (!this.canvas) return;
 
     const widthChunks = maxX - minX + 1;
@@ -127,13 +139,13 @@ export class WorldMap extends LitElement {
     }
   }
 
-  addChunk(chunkX, chunkY, chunkData, minX, minY) {
+  addChunk(chunkX: number, chunkY: number, chunkData: ChunkData, minX: number, minY: number) {
     const chunkKey = `${chunkX},${chunkY}`;
     this.chunks.set(chunkKey, chunkData);
     this._renderChunk(chunkX, chunkY, chunkData, minX, minY);
   }
 
-  _renderChunk(chunkX, chunkY, chunkData, minX, minY) {
+  private _renderChunk(chunkX: number, chunkY: number, chunkData: ChunkData, minX: number, minY: number) {
     if (!this.context || !chunkData) return;
 
     const offsetX = (chunkX - minX) * this.chunkSize * this.tileSize;
@@ -147,14 +159,14 @@ export class WorldMap extends LitElement {
     let opacity = 0.1;
     const fadeIn = () => {
       if (opacity >= 1) {
-        this.context.restore();
+        this.context!.restore();
         return;
       }
       
-      this.context.clearRect(offsetX, offsetY, 
-                           this.chunkSize * this.tileSize, 
-                           this.chunkSize * this.tileSize);
-      this.context.globalAlpha = opacity;
+      this.context!.clearRect(offsetX, offsetY, 
+                       this.chunkSize * this.tileSize, 
+                       this.chunkSize * this.tileSize);
+      this.context!.globalAlpha = opacity;
       
       for (let y = 0; y < this.chunkSize; y++) {
         for (let x = 0; x < this.chunkSize; x++) {
@@ -162,9 +174,9 @@ export class WorldMap extends LitElement {
           const tile = chunkData[tileIndex];
           
           if (tile && tile.biome) {
-            const color = this._getBiomeColor(tile.biome, tile.elevation);
-            this.context.fillStyle = color;
-            this.context.fillRect(
+            const color = this._getBiomeColor(tile.biome as BiomeKey, tile.elevation);
+            this.context!.fillStyle = color;
+            this.context!.fillRect(
               offsetX + x * this.tileSize,
               offsetY + y * this.tileSize,
               this.tileSize,
@@ -181,7 +193,7 @@ export class WorldMap extends LitElement {
     fadeIn();
   }
 
-  _renderMap() {
+  private _renderMap() {
     if (!this.context) return;
 
     this.chunks.forEach((chunkData, chunkKey) => {
@@ -192,7 +204,7 @@ export class WorldMap extends LitElement {
     });
   }
 
-  _renderChunkSimple(chunkX, chunkY, chunkData) {
+  private _renderChunkSimple(chunkX: number, chunkY: number, chunkData: ChunkData) {
     if (!this.context || !chunkData) return;
 
     const offsetX = chunkX * this.chunkSize * this.tileSize;
@@ -204,7 +216,7 @@ export class WorldMap extends LitElement {
         const tile = chunkData[tileIndex];
         
         if (tile && tile.biome) {
-          const color = this._getBiomeColor(tile.biome, tile.elevation);
+          const color = this._getBiomeColor(tile.biome as BiomeKey, tile.elevation);
           this.context.fillStyle = color;
           this.context.fillRect(
             offsetX + x * this.tileSize,
@@ -217,7 +229,7 @@ export class WorldMap extends LitElement {
     }
   }
 
-  _getBiomeColor(biome, elevation = 0) {
+  private _getBiomeColor(biome: BiomeKey, elevation = 0): string {
     const baseColor = WorldMap.BIOME_COLORS[biome] || '#cccccc';
     
     // Apply elevation shading (darker = higher elevation)
@@ -230,7 +242,7 @@ export class WorldMap extends LitElement {
     return baseColor;
   }
 
-  _darkenColor(color, factor) {
+  private _darkenColor(color: string, factor: number): string {
     // Simple color darkening
     const hex = color.replace('#', '');
     const r = Math.floor(parseInt(hex.substr(0, 2), 16) * (1 - factor));
@@ -272,6 +284,12 @@ export class WorldMap extends LitElement {
         ` : ''}
       </div>
     `;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'world-map': WorldMap;
   }
 }
 

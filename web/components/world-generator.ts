@@ -1,6 +1,26 @@
 import { LitElement, html, css } from 'lit';
-import './control-panel.js';
-import './world-map.js';
+import './control-panel.ts';
+import './world-map.ts';
+
+interface ChunkCoordinate {
+  x: number;
+  y: number;
+}
+
+interface ChunkData {
+  [key: number]: {
+    biome: string;
+    elevation: number;
+  };
+}
+
+interface CoordinateChangeDetail {
+  [key: string]: number;
+}
+
+interface WorldNameChangeDetail {
+  worldName: string;
+}
 
 /**
  * Main world generator component that orchestrates chunk generation and rendering
@@ -19,11 +39,14 @@ export class WorldGenerator extends LitElement {
     statusMessage: { type: String }
   };
 
-  static styles = css`
-    :host {
-      display: block;
-    }
-  `;
+  worldMap: any;
+
+  // Private generation state
+  private activeRequests = 0;
+  private maxParallelRequests = 5;
+  private loadingQueue: ChunkCoordinate[] = [];
+  private chunks = new Map<string, ChunkData>();
+  private seed = '';
 
   constructor() {
     super();
@@ -37,32 +60,31 @@ export class WorldGenerator extends LitElement {
     this.loadedChunks = 0;
     this.totalChunks = 0;
     this.statusMessage = '';
-    
-    // Generation state
-    this.activeRequests = 0;
-    this.maxParallelRequests = 5;
-    this.loadingQueue = [];
-    this.chunks = new Map();
-    this.seed = '';
   }
 
   firstUpdated() {
     // Get reference to the world map component
-    this.worldMap = this.shadowRoot.querySelector('world-map');
+    this.worldMap = this.shadowRoot!.querySelector('world-map');
   }
 
-  _handleCoordinateChange(event) {
+  static styles = css`
+    :host {
+      display: block;
+    }
+  `;
+
+  private _handleCoordinateChange(event: CustomEvent<CoordinateChangeDetail>) {
     const { detail } = event;
     Object.keys(detail).forEach(key => {
-      this[key] = detail[key];
+      (this as any)[key] = detail[key];
     });
   }
 
-  _handleWorldNameChange(event) {
+  private _handleWorldNameChange(event: CustomEvent<WorldNameChangeDetail>) {
     this.worldName = event.detail.worldName;
   }
 
-  async _handleStartGeneration() {
+  private async _handleStartGeneration() {
     if (this.isGenerating && this.isPaused) {
       // Resume generation
       this.isPaused = false;
@@ -96,7 +118,7 @@ export class WorldGenerator extends LitElement {
     this._processQueue();
   }
 
-  _handlePauseGeneration() {
+  private _handlePauseGeneration() {
     if (this.isGenerating) {
       this.isPaused = !this.isPaused;
       this.statusMessage = this.isPaused ? 'Generation paused' : 'Resuming generation...';
@@ -107,12 +129,12 @@ export class WorldGenerator extends LitElement {
     }
   }
 
-  _generateRandomSeed() {
+  private _generateRandomSeed(): string {
     return `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
   }
 
-  _generateDiagonalQueue() {
-    const queue = [];
+  private _generateDiagonalQueue(): ChunkCoordinate[] {
+    const queue: ChunkCoordinate[] = [];
     const widthChunks = this.maxX - this.minX + 1;
     const heightChunks = this.maxY - this.minY + 1;
     const maxDiagonal = widthChunks + heightChunks - 2;
@@ -132,13 +154,15 @@ export class WorldGenerator extends LitElement {
     return queue;
   }
 
-  async _processQueue() {
+  private async _processQueue() {
     while (!this.isPaused && 
            this.loadingQueue.length > 0 && 
            this.activeRequests < this.maxParallelRequests) {
       
       const chunk = this.loadingQueue.shift();
-      this._loadChunk(chunk.x, chunk.y);
+      if (chunk) {
+        this._loadChunk(chunk.x, chunk.y);
+      }
     }
 
     // Check if generation is complete
@@ -148,7 +172,7 @@ export class WorldGenerator extends LitElement {
     }
   }
 
-  async _loadChunk(chunkX, chunkY) {
+  private async _loadChunk(chunkX: number, chunkY: number) {
     this.activeRequests++;
 
     try {
@@ -168,7 +192,7 @@ export class WorldGenerator extends LitElement {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const chunkData = await response.json();
+      const chunkData: ChunkData = await response.json();
       
       // Add chunk to map and render
       this.chunks.set(`${chunkX},${chunkY}`, chunkData);
@@ -179,7 +203,7 @@ export class WorldGenerator extends LitElement {
 
     } catch (error) {
       console.error(`Failed to load chunk (${chunkX}, ${chunkY}):`, error);
-      this.statusMessage = `Error loading chunk (${chunkX}, ${chunkY}): ${error.message}`;
+      this.statusMessage = `Error loading chunk (${chunkX}, ${chunkY}): ${(error as Error).message}`;
     } finally {
       this.activeRequests--;
       
@@ -212,6 +236,12 @@ export class WorldGenerator extends LitElement {
         .isGenerating=${this.isGenerating}
       ></world-map>
     `;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'world-generator': WorldGenerator;
   }
 }
 

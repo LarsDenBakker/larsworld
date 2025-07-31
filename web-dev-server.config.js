@@ -1,9 +1,17 @@
+import { esbuildPlugin } from '@web/dev-server-esbuild';
+
 export default {
   rootDir: 'web',
   nodeResolve: true,
   preserveSymlinks: true,
   port: 3001,
   appIndex: 'index.html',
+  plugins: [
+    esbuildPlugin({ 
+      ts: true,
+      target: 'auto'
+    })
+  ],
   middleware: [
     // Proxy API requests to the backend server
     async (ctx, next) => {

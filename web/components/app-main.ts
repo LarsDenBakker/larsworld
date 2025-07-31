@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
-import './world-generator.js';
-import './app-legend.js';
+import './world-generator.ts';
+import './app-legend.ts';
 
 /**
  * Main application component for LarsWorld
@@ -62,6 +62,12 @@ export class AppMain extends LitElement {
         <app-legend></app-legend>
       </div>
     `;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'app-main': AppMain;
   }
 }
 

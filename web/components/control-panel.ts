@@ -1,5 +1,13 @@
 import { LitElement, html, css } from 'lit';
 
+interface CoordinateChangeDetail {
+  [key: string]: number;
+}
+
+interface WorldNameChangeDetail {
+  worldName: string;
+}
+
 /**
  * Control panel component for world generation parameters
  */
@@ -199,7 +207,7 @@ export class ControlPanel extends LitElement {
     this._validateCoordinates();
   }
 
-  willUpdate(changedProperties) {
+  willUpdate(changedProperties: Map<string | number | symbol, unknown>) {
     if (changedProperties.has('minX') || changedProperties.has('maxX') || 
         changedProperties.has('minY') || changedProperties.has('maxY')) {
       this._updateEstimatedSize();
@@ -207,7 +215,7 @@ export class ControlPanel extends LitElement {
     }
   }
 
-  _updateEstimatedSize() {
+  private _updateEstimatedSize() {
     const chunkCount = (this.maxX - this.minX + 1) * (this.maxY - this.minY + 1);
     // Each chunk has 256 tiles, each tile has roughly 100 bytes of data (biome, elevation, etc.)
     const estimatedSizeBytes = chunkCount * 16 * 16 * 100; // More realistic estimation
@@ -215,7 +223,7 @@ export class ControlPanel extends LitElement {
     this.estimatedSize = `${estimatedSizeMB} MB`;
   }
 
-  _validateCoordinates() {
+  private _validateCoordinates() {
     const chunkCount = (this.maxX - this.minX + 1) * (this.maxY - this.minY + 1);
     const estimatedSizeBytes = chunkCount * 16 * 16 * 100; // Match the estimation
     const maxSizeBytes = 6 * 1024 * 1024; // 6MB
@@ -225,30 +233,32 @@ export class ControlPanel extends LitElement {
                    this.maxY >= this.minY;
   }
 
-  _handleInputChange(event) {
-    const { name, value } = event.target;
+  private _handleInputChange(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const { name, value } = target;
     const numValue = parseInt(value, 10);
     
     if (!isNaN(numValue)) {
-      this[name] = numValue;
-      this.dispatchEvent(new CustomEvent('coordinate-change', {
+      (this as any)[name] = numValue;
+      this.dispatchEvent(new CustomEvent<CoordinateChangeDetail>('coordinate-change', {
         detail: { [name]: numValue }
       }));
     }
   }
 
-  _handleWorldNameChange(event) {
-    this.worldName = event.target.value;
-    this.dispatchEvent(new CustomEvent('world-name-change', {
+  private _handleWorldNameChange(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.worldName = target.value;
+    this.dispatchEvent(new CustomEvent<WorldNameChangeDetail>('world-name-change', {
       detail: { worldName: this.worldName }
     }));
   }
 
-  _handleStartGeneration() {
+  private _handleStartGeneration() {
     this.dispatchEvent(new CustomEvent('start-generation'));
   }
 
-  _handlePauseGeneration() {
+  private _handlePauseGeneration() {
     this.dispatchEvent(new CustomEvent('pause-generation'));
   }
 
@@ -267,7 +277,7 @@ export class ControlPanel extends LitElement {
               type="number"
               id="minX"
               name="minX"
-              .value=${this.minX}
+              .value=${this.minX.toString()}
               @input=${this._handleInputChange}
               min="-1000"
               max="1000"
@@ -280,7 +290,7 @@ export class ControlPanel extends LitElement {
               type="number"
               id="maxX"
               name="maxX"
-              .value=${this.maxX}
+              .value=${this.maxX.toString()}
               @input=${this._handleInputChange}
               min="-1000"
               max="1000"
@@ -293,7 +303,7 @@ export class ControlPanel extends LitElement {
               type="number"
               id="minY"
               name="minY"
-              .value=${this.minY}
+              .value=${this.minY.toString()}
               @input=${this._handleInputChange}
               min="-1000"
               max="1000"
@@ -306,7 +316,7 @@ export class ControlPanel extends LitElement {
               type="number"
               id="maxY"
               name="maxY"
-              .value=${this.maxY}
+              .value=${this.maxY.toString()}
               @input=${this._handleInputChange}
               min="-1000"
               max="1000"
@@ -367,6 +377,12 @@ export class ControlPanel extends LitElement {
         ` : ''}
       </div>
     `;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'control-panel': ControlPanel;
   }
 }
 

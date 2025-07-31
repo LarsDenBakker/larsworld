@@ -101,7 +101,7 @@ export class AppLegend extends LitElement {
 
   constructor() {
     super();
-    this.isCollapsed = window.innerWidth <= 768;
+    (this as any).isCollapsed = window.innerWidth <= 768;
   }
 
   connectedCallback() {
@@ -114,14 +114,14 @@ export class AppLegend extends LitElement {
     window.removeEventListener('resize', this._handleResize.bind(this));
   }
 
-  _handleResize() {
-    if (window.innerWidth <= 768 && !this.isCollapsed) {
-      this.isCollapsed = true;
+  private _handleResize() {
+    if (window.innerWidth <= 768 && !(this as any).isCollapsed) {
+      (this as any).isCollapsed = true;
     }
   }
 
-  _toggleLegend() {
-    this.isCollapsed = !this.isCollapsed;
+  private _toggleLegend() {
+    (this as any).isCollapsed = !(this as any).isCollapsed;
   }
 
   render() {
@@ -157,6 +157,12 @@ export class AppLegend extends LitElement {
         </div>
       </div>
     `;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'app-legend': AppLegend;
   }
 }
 

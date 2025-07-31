@@ -1,8 +1,8 @@
 import { expect } from '@esm-bundle/chai';
 import { fixture, html } from '@open-wc/testing';
-import '../../../web/components/app-main.js';
-import '../../../web/components/app-legend.js';
-import '../../../web/components/control-panel.js';
+import '../../../web/components/app-main.ts';
+import '../../../web/components/app-legend.ts';
+import '../../../web/components/control-panel.ts';
 
 describe('LarsWorld Components', () => {
   describe('AppMain', () => {

@@ -133,16 +133,6 @@ const WorldGenerator: React.FC = () => {
       for (const chunkResponse of batchData.chunks) {
         const { chunkX, chunkY, tiles } = chunkResponse
         
-        // Set canvas size before processing first chunk
-        if (!canvasSizeSetRef.current) {
-          const worldMap = getWorldMap()
-          if (worldMap) {
-            worldMap.setMapSize(minX, maxX, minY, maxY)
-            worldMap.clear()
-            canvasSizeSetRef.current = true
-          }
-        }
-        
         // Convert response format to the expected ChunkData format
         const chunkData: ChunkData = {}
         for (let y = 0; y < 16; y++) {
@@ -167,11 +157,15 @@ const WorldGenerator: React.FC = () => {
         
         const worldMap = getWorldMap()
         worldMap?.addChunk(chunkX, chunkY, chunkData, minX, minY)
-        
-        setLoadedChunks(prev => prev + 1)
       }
       
-      setStatusMessage(`Loaded ${loadedChunks}/${totalChunks} chunks (batch of ${batchData.chunks.length})`)
+      // Update loaded chunks count after processing all chunks in batch
+      setLoadedChunks(prev => {
+        const newCount = prev + batchData.chunks.length
+        // Update status message with the new count
+        setStatusMessage(`Loaded ${newCount}/${totalChunks} chunks (batch of ${batchData.chunks.length})`)
+        return newCount
+      })
 
     } catch (error) {
       console.error(`Failed to load chunk batch:`, error)
@@ -201,9 +195,12 @@ const WorldGenerator: React.FC = () => {
     // Check if generation is complete
     if (loadingQueueRef.current.length === 0 && activeRequestsRef.current === 0) {
       setIsGenerating(false)
-      setStatusMessage(`Generation complete! Loaded ${loadedChunks} chunks.`)
+      setLoadedChunks(currentCount => {
+        setStatusMessage(`Generation complete! Loaded ${currentCount} chunks.`)
+        return currentCount
+      })
     }
-  }, [isPaused, loadedChunks])
+  }, [isPaused])
 
   const handleStartGeneration = async () => {
     if (isGenerating && isPaused) {
@@ -233,7 +230,7 @@ const WorldGenerator: React.FC = () => {
     loadingQueueRef.current = generateDiagonalQueue()
     activeRequestsRef.current = 0
     
-    // Start processing
+    // Start processing (canvas will be sized when first chunk is added)
     processQueue()
   }
 

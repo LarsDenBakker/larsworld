@@ -66,15 +66,16 @@ const WorldMap = forwardRef<WorldMapRef, WorldMapProps>(({
     const heightChunks = maxY - minY + 1
     const totalWidth = widthChunks * chunkSize * tileSize
     const totalHeight = heightChunks * chunkSize * tileSize
-
+    
     canvas.width = totalWidth
     canvas.height = totalHeight
     canvas.style.maxWidth = '100%'
     canvas.style.height = 'auto'
 
-    // Clear canvas
-    const context = contextRef.current
+    // Ensure context is available and clear canvas
+    const context = canvas.getContext('2d')
     if (context) {
+      contextRef.current = context
       context.fillStyle = '#f3f4f6'
       context.fillRect(0, 0, totalWidth, totalHeight)
     }
@@ -169,16 +170,49 @@ const WorldMap = forwardRef<WorldMapRef, WorldMapProps>(({
     clear
   }), [setMapSize, addChunk, clear])
 
+  // Effect to auto-size canvas when chunks are first loaded
+  useEffect(() => {
+    if (chunks.size > 0 && canvasRef.current) {
+      // Calculate the bounds from the chunk data
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+      
+      chunks.forEach((_, chunkKey) => {
+        const [chunkX, chunkY] = chunkKey.split(',').map(Number)
+        minX = Math.min(minX, chunkX)
+        maxX = Math.max(maxX, chunkX)
+        minY = Math.min(minY, chunkY)
+        maxY = Math.max(maxY, chunkY)
+      })
+      
+      if (minX !== Infinity) {
+        setMapSize(minX, maxX, minY, maxY)
+        
+        // Re-render all chunks
+        setTimeout(() => renderMap(), 0)
+      }
+    }
+  }, [chunks, setMapSize])
+
   const renderMap = useCallback(() => {
     const context = contextRef.current
-    if (!context) return
+    const canvas = canvasRef.current
+    if (!context || !canvas || chunks.size === 0) return
+
+    // Calculate bounds from chunks
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+    
+    chunks.forEach((_, chunkKey) => {
+      const [chunkX, chunkY] = chunkKey.split(',').map(Number)
+      minX = Math.min(minX, chunkX)
+      maxX = Math.max(maxX, chunkX)
+      minY = Math.min(minY, chunkY)
+      maxY = Math.max(maxY, chunkY)
+    })
 
     chunks.forEach((chunkData, chunkKey) => {
       const [chunkX, chunkY] = chunkKey.split(',').map(Number)
-      // Note: We'd need minX, minY passed in for proper rendering
-      // This is a simplified version
-      const offsetX = chunkX * chunkSize * tileSize
-      const offsetY = chunkY * chunkSize * tileSize
+      const offsetX = (chunkX - minX) * chunkSize * tileSize
+      const offsetY = (chunkY - minY) * chunkSize * tileSize
 
       for (let y = 0; y < chunkSize; y++) {
         for (let x = 0; x < chunkSize; x++) {

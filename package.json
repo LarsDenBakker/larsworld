@@ -11,6 +11,7 @@
     "build": "tsc",
     "test": "npm run test:unit && npm run test:unit:components && npm run test:e2e",
     "test:unit": "node test/world-generator-tests.js",
+    "test:performance": "node test/performance-tests.js",
     "test:unit:components": "web-test-runner --config web-test-runner.config.js",
     "test:generate-pngs": "node test/stable-seed-pngs.js",
     "test:verify-pngs": "node scripts/verify-stable-pngs.js",

@@ -160,21 +160,29 @@ function seedRandom(seed: number): () => number {
 
 
 /**
- * Calculate the flow direction based on elevation gradients (simplified)
+ * Calculate the flow direction based on elevation gradients and natural meandering
  * Returns the direction water would flow from this tile
  */
 function calculateFlowDirection(x: number, y: number, seed: number): { dx: number, dy: number } {
-  // Sample elevation at neighboring tiles (simplified to 4 cardinal directions)
+  // Check all 8 neighboring directions for more natural flow
   const directions = [
-    { dx: 0, dy: -1 }, // North
-    { dx: 1, dy: 0 },  // East
-    { dx: 0, dy: 1 },  // South
-    { dx: -1, dy: 0 }  // West
+    { dx: 0, dy: -1 },  // North
+    { dx: 1, dy: -1 },  // Northeast
+    { dx: 1, dy: 0 },   // East
+    { dx: 1, dy: 1 },   // Southeast
+    { dx: 0, dy: 1 },   // South
+    { dx: -1, dy: 1 },  // Southwest
+    { dx: -1, dy: 0 },  // West
+    { dx: -1, dy: -1 }  // Northwest
   ];
   
   const currentElevation = calculateLandStrengthAtChunk(x, y, seed);
-  let steepestDrop = 0;
-  let flowDirection = { dx: 0, dy: 0 };
+  let bestDirection = { dx: 0, dy: 0 };
+  let bestScore = -1;
+  
+  // Add some randomness for natural meandering
+  const meander = new PerlinNoise(seed + 5000);
+  const meanderValue = meander.noise(x * 0.05, y * 0.05);
   
   for (const dir of directions) {
     const neighborX = x + dir.dx;
@@ -182,18 +190,35 @@ function calculateFlowDirection(x: number, y: number, seed: number): { dx: numbe
     const neighborElevation = calculateLandStrengthAtChunk(neighborX, neighborY, seed);
     
     const elevationDrop = currentElevation - neighborElevation;
-    if (elevationDrop > steepestDrop) {
-      steepestDrop = elevationDrop;
-      flowDirection = dir;
+    
+    // Only consider downward flow
+    if (elevationDrop <= 0) continue;
+    
+    // Calculate flow score considering elevation drop and meandering
+    let flowScore = elevationDrop;
+    
+    // Add slight preference for cardinal directions (more natural)
+    if (dir.dx === 0 || dir.dy === 0) {
+      flowScore *= 1.1;
+    }
+    
+    // Add meandering influence based on direction
+    const directionIndex = directions.indexOf(dir);
+    const meanderInfluence = Math.sin(meanderValue * 8 + directionIndex) * 0.1;
+    flowScore += meanderInfluence;
+    
+    if (flowScore > bestScore) {
+      bestScore = flowScore;
+      bestDirection = dir;
     }
   }
   
-  return flowDirection;
+  return bestDirection;
 }
 
 /**
- * Determine if a location should be a river source (simplified)
- * River sources are placed at high elevation areas
+ * Determine if a location should be a river source
+ * River sources are placed at high elevation areas with adequate moisture
  */
 function isRiverSource(x: number, y: number, seed: number): boolean {
   const elevation = calculateLandStrengthAtChunk(x, y, seed);
@@ -201,40 +226,69 @@ function isRiverSource(x: number, y: number, seed: number): boolean {
   // Only land tiles can be river sources
   if (elevation < 0.5) return false;
   
-  // Use noise to determine river source placement
+  // Get moisture and temperature values for more realistic source placement
+  const noiseGenerators = getTileNoiseGenerators(seed);
+  let moisture = noiseGenerators.moisture.octaveNoise(x * 0.012, y * 0.012, 4, 0.4);
+  moisture = (moisture + 1) / 2; // Normalize to 0-1
+  
+  // Use noise to determine river source placement with elevation and moisture weighting
   const sourceNoise = new PerlinNoise(seed + 1000);
-  const sourceValue = sourceNoise.octaveNoise(x * 0.01, y * 0.01, 2, 0.5);
+  const sourceValue = sourceNoise.octaveNoise(x * 0.008, y * 0.008, 3, 0.6);
   
-  // River sources are found in higher elevation areas
-  const heightFactor = Math.max(0, (elevation - 0.5) * 2); // Scale to 0-1
-  const threshold = 0.4 - heightFactor * 0.3; // Lower threshold at higher elevations
+  // River sources prefer relatively higher elevation within the land range
+  const relativeElevation = (elevation - 0.5) / 0.5; // Normalize within land range
+  const heightFactor = Math.max(0.2, relativeElevation); // Give more weight to higher areas
   
-  return sourceValue > threshold;
+  // Moderate moisture requirement - not too dry, not necessarily very wet
+  const moistureFactor = Math.max(0.3, moisture);
+  
+  // Combined suitability for river source
+  const suitability = heightFactor * moistureFactor;
+  
+  // More permissive threshold to ensure some rivers generate
+  const threshold = 0.3 - suitability * 0.2;
+  
+  return sourceValue > threshold && suitability > 0.2;
 }
 
 /**
- * Calculate simplified flow accumulation using noise
+ * Calculate realistic flow accumulation using multiple noise layers
+ * Simulates water collection and drainage patterns across the landscape
  */
 function calculateFlowAccumulation(x: number, y: number, seed: number): number {
   const drainageNoise = new PerlinNoise(seed + 2000);
+  const watershedNoise = new PerlinNoise(seed + 3000);
   
-  // Use noise to simulate drainage patterns, but make it sparser
-  const drainageValue = drainageNoise.octaveNoise(x * 0.02, y * 0.02, 2, 0.5);
+  // Primary drainage pattern - broad river valleys
+  const primaryDrainage = drainageNoise.octaveNoise(x * 0.006, y * 0.006, 4, 0.6);
   
-  // Convert to positive values and scale down for less dense rivers
-  return (drainageValue + 1) * 1.5;
+  // Secondary watershed patterns - tributary networks
+  const secondaryDrainage = watershedNoise.octaveNoise(x * 0.015, y * 0.015, 3, 0.5);
+  
+  // Elevation-based flow accumulation - adjust for the actual elevation range
+  const elevation = calculateLandStrengthAtChunk(x, y, seed);
+  let elevationFactor = 1.0;
+  
+  if (elevation >= 0.5) {
+    // For land tiles, calculate relative elevation within land range (0.5-1.0)
+    const relativeElevation = (elevation - 0.5) / 0.5; // Normalize to 0-1 within land range
+    elevationFactor = 1.2 - relativeElevation * 0.5; // Higher accumulation at lower elevations within land
+  } else {
+    elevationFactor = 0; // No rivers in ocean
+  }
+  
+  // Combine patterns for realistic flow accumulation
+  const baseAccumulation = (primaryDrainage + secondaryDrainage * 0.6) * elevationFactor;
+  
+  // Normalize and scale for appropriate river density
+  return Math.max(0, (baseAccumulation + 1) * 2.5);
 }
 
 /**
- * Determine the river segment type (simplified)
- * DISABLED: Always returns 'none' to disable river generation
+ * Determine the river segment type based on terrain and flow patterns
+ * Generates realistic river networks that follow elevation and integrate smoothly
  */
 function calculateRiverType(x: number, y: number, seed: number): RiverType {
-  // Rivers disabled - always return 'none'
-  return 'none';
-  
-  // Original river generation logic (commented out):
-  /*
   const elevation = calculateLandStrengthAtChunk(x, y, seed);
   
   // No rivers in ocean
@@ -243,34 +297,40 @@ function calculateRiverType(x: number, y: number, seed: number): RiverType {
   const flowAccumulation = calculateFlowAccumulation(x, y, seed);
   const isSource = isRiverSource(x, y, seed);
   
-  // Balanced threshold for river presence
-  const riverThreshold = isSource ? 1.2 : 2.0;
+  // Optimized thresholds for realistic river density (target: 5-15% of land tiles)
+  const sourceThreshold = 2.9;
+  const riverThreshold = isSource ? sourceThreshold : 3.2;
   
   if (flowAccumulation < riverThreshold) return 'none';
   
   const flowDirection = calculateFlowDirection(x, y, seed);
   
-  // If no clear flow direction, no river
+  // If no clear flow direction, no river (e.g., at local elevation peaks)
   if (flowDirection.dx === 0 && flowDirection.dy === 0) return 'none';
   
-  // Determine segment type based on flow direction (simplified)
+  // Determine segment type based on flow direction for realistic river visualization
   if (flowDirection.dy === 0) {
+    // Pure horizontal flow
     return 'horizontal';
   } else if (flowDirection.dx === 0) {
+    // Pure vertical flow
     return 'vertical';
   } else {
-    // For diagonal flow, randomly pick a bend type based on direction
+    // Diagonal flow - use appropriate bend segments for smooth connections
     if (flowDirection.dx > 0 && flowDirection.dy > 0) {
+      // Southeast flow
       return 'bend_se';
     } else if (flowDirection.dx > 0 && flowDirection.dy < 0) {
+      // Northeast flow
       return 'bend_ne';
     } else if (flowDirection.dx < 0 && flowDirection.dy > 0) {
+      // Southwest flow
       return 'bend_sw';
     } else {
+      // Northwest flow
       return 'bend_nw';
     }
   }
-  */
 }
 
 /**

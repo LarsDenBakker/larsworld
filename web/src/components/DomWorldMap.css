@@ -13,22 +13,36 @@
   width: 100%;
   height: 100%;
   overflow: auto;
-  display: grid;
-  grid-template-columns: repeat(var(--map-width), var(--tile-size));
-  grid-template-rows: repeat(var(--map-height), var(--tile-size));
-  gap: 0;
   padding: 20px;
   box-sizing: border-box;
+  position: relative;
+}
+
+/* Simple grid uses absolute positioning instead of CSS Grid to avoid layout shifts */
+.dom-world-map.simple-grid {
+  display: block;
 }
 
 .world-tile {
-  width: var(--tile-size);
-  height: var(--tile-size);
-  transition: opacity 0.3s ease-in-out, transform 0.15s ease-in-out;
-  animation: fadeIn 0.5s ease-in-out;
-  cursor: pointer;
+  /* Fixed size regardless of map size */
+  width: 6px;
+  height: 6px;
   border: 1px solid rgba(0, 0, 0, 0.05);
   box-sizing: border-box;
+  cursor: pointer;
+  
+  /* Optimize individual tiles */
+  contain: layout style paint;
+  position: absolute;
+  
+  /* Simple transition without complex animations */
+  transition: transform 0.15s ease-in-out;
+}
+
+/* Placeholder styling for unloaded tiles */
+.world-tile.placeholder {
+  background-color: #e5e7eb;
+  cursor: default;
 }
 
 .world-tile:hover {
@@ -38,14 +52,14 @@
   border-color: rgba(0, 0, 0, 0.3);
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+/* Don't show hover effects on placeholder tiles */
+.world-tile.placeholder:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: rgba(0, 0, 0, 0.05);
 }
+
+/* Remove the fadeIn animation as it's no longer needed */
 
 .map-placeholder {
   flex: 1;
@@ -125,6 +139,12 @@
     transform: scale(0.95);
     opacity: 0.8;
   }
+  
+  /* No effects on placeholder tiles */
+  .world-tile.placeholder:active {
+    transform: none;
+    opacity: 1;
+  }
 }
 
 /* Performance optimizations for large maps */
@@ -135,18 +155,4 @@
   
   /* Optimize rendering */
   contain: layout style paint;
-}
-
-/* Disable animations during rendering for better performance */
-.dom-world-map.rendering .world-tile {
-  animation: none !important;
-  transition: none !important;
-}
-
-.world-tile {
-  /* Optimize individual tiles */
-  contain: layout style paint;
-  
-  /* Reduce reflows */
-  position: relative;
 }

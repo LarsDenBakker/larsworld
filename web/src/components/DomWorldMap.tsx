@@ -40,9 +40,12 @@ const BIOME_COLORS: Record<BiomeKey, string> = {
   alpine: '#a9a9a9'
 }
 
+// Fixed placeholder color for unloaded tiles
+const PLACEHOLDER_COLOR = '#e5e7eb'
+
 /**
- * DOM-based world map component for rendering chunks using HTML/CSS
- * Alternative to canvas rendering for performance comparison
+ * DOM-based world map component with fixed-size grid and placeholder tiles
+ * Eliminates flickering and zoom issues by pre-creating stable layout
  */
 const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({ 
   chunks, 
@@ -52,15 +55,12 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const boundsRef = useRef<{ minX: number, maxX: number, minY: number, maxY: number } | null>(null)
-  const renderingRef = useRef<boolean>(false)
-  const renderFrameRef = useRef<number | null>(null)
+  const tilesMapRef = useRef<Map<string, HTMLDivElement>>(new Map())
   
-  // State for progressive rendering
-  const [renderedTiles, setRenderedTiles] = useState<JSX.Element[]>([])
-  const [isRendering, setIsRendering] = useState(false)
-  const [renderProgress, setRenderProgress] = useState({ rendered: 0, total: 0 })
+  // State for bounds to trigger re-render
+  const [bounds, setBounds] = useState<{ minX: number, maxX: number, minY: number, maxY: number } | null>(null)
   
-  // State for tooltip
+  // State for tooltip only
   const [tooltip, setTooltip] = useState<{
     visible: boolean
     x: number
@@ -117,213 +117,174 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
     return `rgb(${r}, ${g}, ${b})`
   }
 
-  // Progressive rendering effect
-  useEffect(() => {
-    if (!boundsRef.current || chunks.size === 0) {
-      setRenderedTiles([])
-      setRenderProgress({ rendered: 0, total: 0 })
-      return
-    }
+  // Create placeholder tiles when bounds are set
+  const createPlaceholderTiles = useCallback(() => {
+    if (!bounds || !containerRef.current) return
 
-    // Cancel any ongoing rendering
-    if (renderFrameRef.current) {
-      cancelAnimationFrame(renderFrameRef.current)
-    }
-
-    renderingRef.current = true
-    setIsRendering(true)
-    setRenderedTiles([])
-
-    const { minX, maxX, minY, maxY } = boundsRef.current
-    
-    // Ensure container size is set when we start rendering
+    const { minX, maxX, minY, maxY } = bounds
     const container = containerRef.current
-    if (container) {
-      const widthChunks = maxX - minX + 1
-      const heightChunks = maxY - minY + 1
-      const totalWidth = widthChunks * chunkSize * tileSize
-      const totalHeight = heightChunks * chunkSize * tileSize
-      
-      container.style.width = `${totalWidth}px`
-      container.style.height = `${totalHeight}px`
-      container.style.setProperty('--tile-size', `${tileSize}px`)
-      container.style.setProperty('--chunk-size', `${chunkSize}`)
-      container.style.setProperty('--map-width', `${widthChunks * chunkSize}`)
-      container.style.setProperty('--map-height', `${heightChunks * chunkSize}`)
-    }
-
-    const chunksArray = Array.from(chunks.entries())
-    const totalTiles = chunksArray.reduce((sum, [_, chunkData]) => {
-      return sum + Object.keys(chunkData).length
-    }, 0)
     
-    setRenderProgress({ rendered: 0, total: totalTiles })
-    
-    let chunkIndex = 0
-    let tileIndex = 0
-    let renderedCount = 0
-    const batchSize = 100 // Render 100 tiles per frame
-    const newTiles: JSX.Element[] = []
+    // Clear existing tiles
+    container.innerHTML = ''
+    tilesMapRef.current.clear()
 
-    const renderBatch = () => {
-      const batchStart = performance.now()
-      let tilesInBatch = 0
-
-      while (chunkIndex < chunksArray.length && tilesInBatch < batchSize) {
-        const [chunkKey, chunkData] = chunksArray[chunkIndex]
-        const [chunkX, chunkY] = chunkKey.split(',').map(Number)
-        const tileKeys = Object.keys(chunkData)
-
-        while (tileIndex < tileKeys.length && tilesInBatch < batchSize) {
-          const tileKey = parseInt(tileKeys[tileIndex])
-          const tile = chunkData[tileKey]
-          
-          if (tile && tile.biome) {
-            const y = Math.floor(tileKey / chunkSize)
-            const x = tileKey % chunkSize
-            const globalX = (chunkX - minX) * chunkSize + x
-            const globalY = (chunkY - minY) * chunkSize + y
-            const color = getBiomeColor(tile.biome as BiomeKey, tile.elevation)
-            
-            const handleTileHover = (event: React.MouseEvent) => {
-              const clientX = event.clientX
-              const clientY = event.clientY
-              
-              setTooltip({
-                visible: true,
-                x: clientX,
-                y: clientY,
-                tileData: {
-                  biome: tile.biome,
-                  elevation: tile.elevation,
-                  worldX: globalX,
-                  worldY: globalY,
-                  chunkX: chunkX,
-                  chunkY: chunkY,
-                  localX: x,
-                  localY: y
-                }
-              })
-            }
-            
-            const handleTileLeave = () => {
-              setTooltip(prev => ({ ...prev, visible: false }))
-            }
-            
-            const handleTileClick = (event: React.MouseEvent) => {
-              const clientX = event.clientX
-              const clientY = event.clientY
-              
-              setTooltip(prev => ({
-                visible: !prev.visible || prev.tileData?.worldX !== globalX || prev.tileData?.worldY !== globalY,
-                x: clientX,
-                y: clientY,
-                tileData: {
-                  biome: tile.biome,
-                  elevation: tile.elevation,
-                  worldX: globalX,
-                  worldY: globalY,
-                  chunkX: chunkX,
-                  chunkY: chunkY,
-                  localX: x,
-                  localY: y
-                }
-              }))
-            }
-            
-            newTiles.push(
-              <div
-                key={`tile-${globalX}-${globalY}`}
-                className="world-tile"
-                style={{
-                  backgroundColor: color,
-                  gridColumn: globalX + 1,
-                  gridRow: globalY + 1
-                }}
-                onMouseEnter={handleTileHover}
-                onMouseLeave={handleTileLeave}
-                onClick={handleTileClick}
-                data-tile-x={globalX}
-                data-tile-y={globalY}
-              />
-            )
-            
-            renderedCount++
-            tilesInBatch++
-          }
-          
-          tileIndex++
-        }
-
-        if (tileIndex >= tileKeys.length) {
-          chunkIndex++
-          tileIndex = 0
-        }
-      }
-
-      // Update rendered tiles and progress
-      setRenderedTiles([...newTiles])
-      setRenderProgress({ rendered: renderedCount, total: totalTiles })
-
-      // Continue rendering if there are more chunks and we haven't been cancelled
-      if (chunkIndex < chunksArray.length && renderingRef.current) {
-        // Yield control back to browser if we've been rendering for more than 16ms
-        const elapsed = performance.now() - batchStart
-        const delay = elapsed > 16 ? 0 : Math.max(0, 16 - elapsed)
-        
-        renderFrameRef.current = requestAnimationFrame(() => {
-          setTimeout(renderBatch, delay)
-        })
-      } else {
-        // Rendering complete
-        setIsRendering(false)
-        renderingRef.current = false
-        renderFrameRef.current = null
-      }
-    }
-
-    // Start rendering
-    renderBatch()
-
-    // Cleanup function
-    return () => {
-      renderingRef.current = false
-      if (renderFrameRef.current) {
-        cancelAnimationFrame(renderFrameRef.current)
-        renderFrameRef.current = null
-      }
-    }
-  }, [chunks, chunkSize, tileSize, getBiomeColor])
-
-  const setMapSize = useCallback((minX: number, maxX: number, minY: number, maxY: number) => {
-    boundsRef.current = { minX, maxX, minY, maxY }
-    
-    const container = containerRef.current
-    if (!container) return
-
+    // Set container size upfront - this is fixed and won't change
     const widthChunks = maxX - minX + 1
     const heightChunks = maxY - minY + 1
     const totalWidth = widthChunks * chunkSize * tileSize
     const totalHeight = heightChunks * chunkSize * tileSize
     
-    // Set container size and CSS custom properties for grid layout
     container.style.width = `${totalWidth}px`
     container.style.height = `${totalHeight}px`
-    container.style.setProperty('--tile-size', `${tileSize}px`)
-    container.style.setProperty('--chunk-size', `${chunkSize}`)
-    container.style.setProperty('--map-width', `${widthChunks * chunkSize}`)
-    container.style.setProperty('--map-height', `${heightChunks * chunkSize}`)
-  }, [chunkSize, tileSize])
+
+    // Create all placeholder tiles upfront
+    for (let chunkY = minY; chunkY <= maxY; chunkY++) {
+      for (let chunkX = minX; chunkX <= maxX; chunkX++) {
+        for (let localY = 0; localY < chunkSize; localY++) {
+          for (let localX = 0; localX < chunkSize; localX++) {
+            const globalX = (chunkX - minX) * chunkSize + localX
+            const globalY = (chunkY - minY) * chunkSize + localY
+            const tileKey = `${globalX}-${globalY}`
+            
+            const tileElement = document.createElement('div')
+            tileElement.className = 'world-tile placeholder'
+            tileElement.style.position = 'absolute'
+            tileElement.style.left = `${globalX * tileSize}px`
+            tileElement.style.top = `${globalY * tileSize}px`
+            tileElement.style.width = `${tileSize}px`
+            tileElement.style.height = `${tileSize}px`
+            tileElement.style.backgroundColor = PLACEHOLDER_COLOR
+            
+            // Store tile data for interactions
+            tileElement.dataset.tileX = globalX.toString()
+            tileElement.dataset.tileY = globalY.toString()
+            tileElement.dataset.chunkX = chunkX.toString()
+            tileElement.dataset.chunkY = chunkY.toString()
+            tileElement.dataset.localX = localX.toString()
+            tileElement.dataset.localY = localY.toString()
+            
+            container.appendChild(tileElement)
+            tilesMapRef.current.set(tileKey, tileElement)
+          }
+        }
+      }
+    }
+  }, [bounds, chunkSize, tileSize])
+
+  // Create placeholder tiles when both bounds and container are available
+  useEffect(() => {
+    if (bounds && containerRef.current) {
+      createPlaceholderTiles();
+    }
+  }, [createPlaceholderTiles]);
+
+  // Update tiles when chunks change
+  useEffect(() => {
+    if (!bounds || chunks.size === 0) return
+
+    const { minX, minY } = bounds
+
+    // Update each chunk's tiles
+    chunks.forEach((chunkData, chunkKey) => {
+      const [chunkX, chunkY] = chunkKey.split(',').map(Number)
+      
+      // Update each tile in the chunk
+      Object.entries(chunkData).forEach(([tileIndex, tile]) => {
+        const tileKey = parseInt(tileIndex)
+        const localY = Math.floor(tileKey / chunkSize)
+        const localX = tileKey % chunkSize
+        const globalX = (chunkX - minX) * chunkSize + localX
+        const globalY = (chunkY - minY) * chunkSize + localY
+        const tileElementKey = `${globalX}-${globalY}`
+        
+        const tileElement = tilesMapRef.current.get(tileElementKey)
+        if (tileElement && tile.biome) {
+          const color = getBiomeColor(tile.biome as BiomeKey, tile.elevation)
+          
+          // Update tile appearance without layout changes
+          tileElement.style.backgroundColor = color
+          tileElement.classList.remove('placeholder')
+          
+          // Store tile data for tooltip
+          tileElement.dataset.biome = tile.biome
+          tileElement.dataset.elevation = tile.elevation.toString()
+          
+          // Add event listeners for interaction
+          const handleTileHover = (event: MouseEvent) => {
+            const clientX = event.clientX
+            const clientY = event.clientY
+            
+            setTooltip({
+              visible: true,
+              x: clientX,
+              y: clientY,
+              tileData: {
+                biome: tile.biome,
+                elevation: tile.elevation,
+                worldX: globalX,
+                worldY: globalY,
+                chunkX: chunkX,
+                chunkY: chunkY,
+                localX: localX,
+                localY: localY
+              }
+            })
+          }
+          
+          const handleTileLeave = () => {
+            setTooltip(prev => ({ ...prev, visible: false }))
+          }
+          
+          const handleTileClick = (event: MouseEvent) => {
+            const clientX = event.clientX
+            const clientY = event.clientY
+            
+            setTooltip(prev => ({
+              visible: !prev.visible || prev.tileData?.worldX !== globalX || prev.tileData?.worldY !== globalY,
+              x: clientX,
+              y: clientY,
+              tileData: {
+                biome: tile.biome,
+                elevation: tile.elevation,
+                worldX: globalX,
+                worldY: globalY,
+                chunkX: chunkX,
+                chunkY: chunkY,
+                localX: localX,
+                localY: localY
+              }
+            }))
+          }
+          
+          // Remove old listeners and add new ones
+          tileElement.removeEventListener('mouseenter', handleTileHover as any)
+          tileElement.removeEventListener('mouseleave', handleTileLeave as any)
+          tileElement.removeEventListener('click', handleTileClick as any)
+          
+          tileElement.addEventListener('mouseenter', handleTileHover)
+          tileElement.addEventListener('mouseleave', handleTileLeave)
+          tileElement.addEventListener('click', handleTileClick)
+        }
+      })
+    })
+  }, [chunks, chunkSize, getBiomeColor, bounds])
+
+  const setMapSize = useCallback((minX: number, maxX: number, minY: number, maxY: number) => {
+    boundsRef.current = { minX, maxX, minY, maxY }
+    
+    // Set bounds state to trigger re-render and useEffect
+    setBounds({ minX, maxX, minY, maxY })
+  }, [])
 
   const addChunk = useCallback((chunkX: number, chunkY: number, chunkData: ChunkData, minX: number, minY: number) => {
-    // For DOM rendering, chunks are rendered through React state updates
-    // The actual rendering happens in the render method below
+    // Chunks are handled automatically via the chunks prop and useEffect
   }, [])
 
   const clear = useCallback(() => {
     const container = containerRef.current
     if (container) {
       container.innerHTML = ''
+      tilesMapRef.current.clear()
     }
   }, [])
 
@@ -334,17 +295,15 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
     clear
   }), [setMapSize, addChunk, clear])
 
-  const hasChunks = chunks.size > 0
+  const hasMapArea = bounds !== null
 
   return (
     <div className="dom-map-container">
-      {hasChunks ? (
+      {hasMapArea ? (
         <div 
           ref={containerRef}
-          className={`dom-world-map ${isRendering ? 'rendering' : ''}`}
-        >
-          {renderedTiles}
-        </div>
+          className="dom-world-map simple-grid"
+        />
       ) : (
         <div className="map-placeholder">
           {isGenerating ? 
@@ -354,13 +313,9 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
         </div>
       )}
       
-      {(isGenerating || isRendering) && (
+      {isGenerating && (
         <div className="progress-info">
-          {isGenerating ? (
-            `Loading chunks... ${chunks.size} loaded`
-          ) : isRendering ? (
-            `Rendering tiles... ${renderProgress.rendered}/${renderProgress.total} (${Math.round((renderProgress.rendered / renderProgress.total) * 100)}%)`
-          ) : null}
+          Loading chunks... {chunks.size} loaded
         </div>
       )}
       

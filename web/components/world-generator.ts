@@ -160,9 +160,10 @@ export class WorldGenerator extends LitElement {
            this.loadingQueue.length > 0 && 
            this.activeRequests < this.maxParallelRequests) {
       
-      const chunk = this.loadingQueue.shift();
-      if (chunk) {
-        this._loadChunk(chunk.x, chunk.y);
+      // Create batch of chunks to load (up to batchSize)
+      const batchChunks = this.loadingQueue.splice(0, this.batchSize);
+      if (batchChunks.length > 0) {
+        this._loadChunkBatch(batchChunks);
       }
     }
 
@@ -173,18 +174,17 @@ export class WorldGenerator extends LitElement {
     }
   }
 
-  private async _loadChunk(chunkX: number, chunkY: number) {
+  private async _loadChunkBatch(batchChunks: ChunkCoordinate[]) {
     this.activeRequests++;
 
     try {
-      const response = await fetch('/api/chunk', {
+      const response = await fetch('/api/chunks', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          chunkX,
-          chunkY,
+          chunks: batchChunks.map(c => ({ chunkX: c.x, chunkY: c.y })),
           seed: this.seed
         })
       });
@@ -193,33 +193,39 @@ export class WorldGenerator extends LitElement {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const chunkResponse = await response.json();
+      const batchData = await response.json();
       
-      // Convert response format to the expected ChunkData format
-      const chunkData: ChunkData = {};
-      for (let y = 0; y < 16; y++) {
-        for (let x = 0; x < 16; x++) {
-          const tileIndex = y * 16 + x;
-          const tile = chunkResponse.tiles[y][x];
-          
-          // Convert compact tile format to expected format
-          chunkData[tileIndex] = {
-            biome: this._getBiomeFromCompactTile(tile),
-            elevation: tile.e / 255
-          };
+      // Process each chunk in the batch
+      for (const chunkResponse of batchData.chunks) {
+        const { chunkX, chunkY, tiles } = chunkResponse;
+        
+        // Convert response format to the expected ChunkData format
+        const chunkData: ChunkData = {};
+        for (let y = 0; y < 16; y++) {
+          for (let x = 0; x < 16; x++) {
+            const tileIndex = y * 16 + x;
+            const tile = tiles[y][x];
+            
+            // Convert compact tile format to expected format
+            chunkData[tileIndex] = {
+              biome: this._getBiomeFromCompactTile(tile),
+              elevation: tile.e / 255
+            };
+          }
         }
+        
+        // Add chunk to map and render with fade animation
+        this.chunks.set(`${chunkX},${chunkY}`, chunkData);
+        this.worldMap?.addChunk(chunkX, chunkY, chunkData, this.minX, this.minY);
+        
+        this.loadedChunks++;
       }
       
-      // Add chunk to map and render with fade animation
-      this.chunks.set(`${chunkX},${chunkY}`, chunkData);
-      this.worldMap?.addChunk(chunkX, chunkY, chunkData, this.minX, this.minY);
-      
-      this.loadedChunks++;
-      this.statusMessage = `Loaded ${this.loadedChunks}/${this.totalChunks} chunks`;
+      this.statusMessage = `Loaded ${this.loadedChunks}/${this.totalChunks} chunks (batch of ${batchData.chunks.length})`;
 
     } catch (error) {
-      console.error(`Failed to load chunk (${chunkX}, ${chunkY}):`, error);
-      this.statusMessage = `Error loading chunk (${chunkX}, ${chunkY}): ${(error as Error).message}`;
+      console.error(`Failed to load chunk batch:`, error);
+      this.statusMessage = `Error loading chunk batch: ${(error as Error).message}`;
     } finally {
       this.activeRequests--;
       

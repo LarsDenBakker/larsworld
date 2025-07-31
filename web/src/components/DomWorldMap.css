@@ -1,0 +1,99 @@
+.dom-map-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #f3f4f6;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.dom-world-map {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(var(--map-width), var(--tile-size));
+  grid-template-rows: repeat(var(--map-height), var(--tile-size));
+  gap: 0;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.world-tile {
+  width: var(--tile-size);
+  height: var(--tile-size);
+  transition: opacity 0.3s ease-in-out;
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.map-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.progress-info {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .dom-world-map {
+    padding: 10px;
+  }
+  
+  .map-placeholder {
+    font-size: 16px;
+    padding: 20px;
+    text-align: center;
+  }
+  
+  .progress-info {
+    bottom: 10px;
+    right: 10px;
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+}
+
+/* Performance optimizations for large maps */
+.dom-world-map {
+  /* Enable hardware acceleration */
+  transform: translateZ(0);
+  will-change: transform;
+  
+  /* Optimize rendering */
+  contain: layout style paint;
+}
+
+.world-tile {
+  /* Optimize individual tiles */
+  contain: layout style paint;
+  
+  /* Reduce reflows */
+  position: relative;
+}

@@ -41,7 +41,18 @@
   transition: border-color 0.2s;
 }
 
-.input-group input:focus {
+.input-group select {
+  padding: 0.75rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 1rem;
+  background: white;
+  transition: border-color 0.2s;
+  cursor: pointer;
+}
+
+.input-group input:focus,
+.input-group select:focus {
   outline: none;
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
@@ -53,9 +64,13 @@
 
 .world-name-group {
   margin-bottom: 1.5rem;
+  display: grid;
+  grid-template-columns: 1fr 200px;
+  gap: 1rem;
 }
 
-.world-name-group input {
+.world-name-group input,
+.world-name-group select {
   width: 100%;
   box-sizing: border-box;
 }

@@ -170,28 +170,8 @@ const WorldMap = forwardRef<WorldMapRef, WorldMapProps>(({
     clear
   }), [setMapSize, addChunk, clear])
 
-  // Effect to auto-size canvas when chunks are first loaded
-  useEffect(() => {
-    if (chunks.size > 0 && canvasRef.current) {
-      // Calculate the bounds from the chunk data
-      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
-      
-      chunks.forEach((_, chunkKey) => {
-        const [chunkX, chunkY] = chunkKey.split(',').map(Number)
-        minX = Math.min(minX, chunkX)
-        maxX = Math.max(maxX, chunkX)
-        minY = Math.min(minY, chunkY)
-        maxY = Math.max(maxY, chunkY)
-      })
-      
-      if (minX !== Infinity) {
-        setMapSize(minX, maxX, minY, maxY)
-        
-        // Re-render all chunks
-        setTimeout(() => renderMap(), 0)
-      }
-    }
-  }, [chunks, setMapSize])
+  // Note: Canvas sizing is now handled upfront by the parent component
+  // when generation starts, rather than auto-sizing on every chunk addition
 
   const renderMap = useCallback(() => {
     const context = contextRef.current

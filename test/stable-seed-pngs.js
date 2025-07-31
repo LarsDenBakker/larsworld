@@ -99,27 +99,33 @@ async function generateRiverOnlyPng(map, mapSize, filepath) {
 
 /**
  * Draw a river segment based on its type
- * Rivers appear as lines flowing through tiles, not full tile coloring
+ * Rivers appear as smooth lines flowing through tiles with less noisy edges
  */
 function drawRiverSegment(buffer, tileX, tileY, riverType, cellSize, imageWidth, color) {
   const startX = tileX * cellSize;
   const startY = tileY * cellSize;
   
-  // Helper function to set pixel color
-  function setPixel(px, py, color) {
-    if (px >= 0 && px < imageWidth/1 && py >= 0) {
-      const pixelIndex = (py * imageWidth + px) * 4;
-      if (pixelIndex >= 0 && pixelIndex < buffer.length - 3) {
-        buffer[pixelIndex] = color[0];     // R
-        buffer[pixelIndex + 1] = color[1]; // G
-        buffer[pixelIndex + 2] = color[2]; // B
-        buffer[pixelIndex + 3] = color[3]; // A
+  // Helper function to set pixel color with optional thickness
+  function setPixel(px, py, color, thickness = 1) {
+    for (let dx = 0; dx < thickness; dx++) {
+      for (let dy = 0; dy < thickness; dy++) {
+        const x = Math.floor(px) + dx;
+        const y = Math.floor(py) + dy;
+        if (x >= 0 && x < imageWidth && y >= 0) {
+          const pixelIndex = (y * imageWidth + x) * 4;
+          if (pixelIndex >= 0 && pixelIndex < buffer.length - 3) {
+            buffer[pixelIndex] = color[0];     // R
+            buffer[pixelIndex + 1] = color[1]; // G
+            buffer[pixelIndex + 2] = color[2]; // B
+            buffer[pixelIndex + 3] = color[3]; // A
+          }
+        }
       }
     }
   }
   
-  // Helper function to draw a line between two points
-  function drawLine(x1, y1, x2, y2) {
+  // Helper function to draw a smooth line between two points
+  function drawLine(x1, y1, x2, y2, thickness = 1) {
     const dx = Math.abs(x2 - x1);
     const dy = Math.abs(y2 - y1);
     const sx = x1 < x2 ? 1 : -1;
@@ -128,7 +134,7 @@ function drawRiverSegment(buffer, tileX, tileY, riverType, cellSize, imageWidth,
     
     let x = x1, y = y1;
     while (true) {
-      setPixel(x, y, color);
+      setPixel(x, y, color, thickness);
       
       if (x === x2 && y === y2) break;
       
@@ -144,6 +150,22 @@ function drawRiverSegment(buffer, tileX, tileY, riverType, cellSize, imageWidth,
     }
   }
   
+  // Helper function to draw a smooth quadratic curve
+  function drawSmoothCurve(x1, y1, x2, y2, x3, y3, thickness = 1) {
+    const steps = Math.max(Math.abs(x3 - x1), Math.abs(y3 - y1), 10);
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const t2 = t * t;
+      const oneMinusT = 1 - t;
+      const oneMinusT2 = oneMinusT * oneMinusT;
+      
+      const x = oneMinusT2 * x1 + 2 * oneMinusT * t * x2 + t2 * x3;
+      const y = oneMinusT2 * y1 + 2 * oneMinusT * t * y2 + t2 * y3;
+      
+      setPixel(x, y, color, thickness);
+    }
+  }
+  
   // Calculate center and edge points for the tile
   const centerX = startX + cellSize / 2;
   const centerY = startY + cellSize / 2;
@@ -152,70 +174,81 @@ function drawRiverSegment(buffer, tileX, tileY, riverType, cellSize, imageWidth,
   const leftX = startX;
   const rightX = startX + cellSize - 1;
   
-  // Draw river segment based on type
+  // Line thickness for smoother appearance
+  const lineThickness = 2;
+  
+  // Draw river segment based on type with smoother curves
   switch (riverType) {
     case 'horizontal':
       // Horizontal line from left edge to right edge
-      drawLine(leftX, centerY, rightX, centerY);
+      drawLine(leftX, centerY, rightX, centerY, lineThickness);
       break;
       
     case 'vertical':
       // Vertical line from top edge to bottom edge
-      drawLine(centerX, topY, centerX, bottomY);
+      drawLine(centerX, topY, centerX, bottomY, lineThickness);
       break;
       
     case 'bend_ne':
-      // Bend from north to east: top center to right center
-      drawLine(centerX, topY, centerX, centerY);
-      drawLine(centerX, centerY, rightX, centerY);
+      // Smooth curve from north to east
+      const ne_controlX = centerX + cellSize * 0.3;
+      const ne_controlY = centerY - cellSize * 0.3;
+      drawSmoothCurve(centerX, topY, ne_controlX, ne_controlY, rightX, centerY, lineThickness);
       break;
       
     case 'bend_nw':
-      // Bend from north to west: top center to left center
-      drawLine(centerX, topY, centerX, centerY);
-      drawLine(centerX, centerY, leftX, centerY);
+      // Smooth curve from north to west
+      const nw_controlX = centerX - cellSize * 0.3;
+      const nw_controlY = centerY - cellSize * 0.3;
+      drawSmoothCurve(centerX, topY, nw_controlX, nw_controlY, leftX, centerY, lineThickness);
       break;
       
     case 'bend_se':
-      // Bend from south to east: bottom center to right center
-      drawLine(centerX, bottomY, centerX, centerY);
-      drawLine(centerX, centerY, rightX, centerY);
+      // Smooth curve from south to east
+      const se_controlX = centerX + cellSize * 0.3;
+      const se_controlY = centerY + cellSize * 0.3;
+      drawSmoothCurve(centerX, bottomY, se_controlX, se_controlY, rightX, centerY, lineThickness);
       break;
       
     case 'bend_sw':
-      // Bend from south to west: bottom center to left center
-      drawLine(centerX, bottomY, centerX, centerY);
-      drawLine(centerX, centerY, leftX, centerY);
+      // Smooth curve from south to west
+      const sw_controlX = centerX - cellSize * 0.3;
+      const sw_controlY = centerY + cellSize * 0.3;
+      drawSmoothCurve(centerX, bottomY, sw_controlX, sw_controlY, leftX, centerY, lineThickness);
       break;
       
     case 'bend_en':
-      // Bend from east to north: right center to top center
-      drawLine(rightX, centerY, centerX, centerY);
-      drawLine(centerX, centerY, centerX, topY);
+      // Smooth curve from east to north
+      const en_controlX = centerX + cellSize * 0.3;
+      const en_controlY = centerY - cellSize * 0.3;
+      drawSmoothCurve(rightX, centerY, en_controlX, en_controlY, centerX, topY, lineThickness);
       break;
       
     case 'bend_es':
-      // Bend from east to south: right center to bottom center
-      drawLine(rightX, centerY, centerX, centerY);
-      drawLine(centerX, centerY, centerX, bottomY);
+      // Smooth curve from east to south
+      const es_controlX = centerX + cellSize * 0.3;
+      const es_controlY = centerY + cellSize * 0.3;
+      drawSmoothCurve(rightX, centerY, es_controlX, es_controlY, centerX, bottomY, lineThickness);
       break;
       
     case 'bend_wn':
-      // Bend from west to north: left center to top center
-      drawLine(leftX, centerY, centerX, centerY);
-      drawLine(centerX, centerY, centerX, topY);
+      // Smooth curve from west to north
+      const wn_controlX = centerX - cellSize * 0.3;
+      const wn_controlY = centerY - cellSize * 0.3;
+      drawSmoothCurve(leftX, centerY, wn_controlX, wn_controlY, centerX, topY, lineThickness);
       break;
       
     case 'bend_ws':
-      // Bend from west to south: left center to bottom center
-      drawLine(leftX, centerY, centerX, centerY);
-      drawLine(centerX, centerY, centerX, bottomY);
+      // Smooth curve from west to south
+      const ws_controlX = centerX - cellSize * 0.3;
+      const ws_controlY = centerY + cellSize * 0.3;
+      drawSmoothCurve(leftX, centerY, ws_controlX, ws_controlY, centerX, bottomY, lineThickness);
       break;
       
     default:
       // For unknown types, draw a simple cross to indicate presence
-      drawLine(leftX, centerY, rightX, centerY);
-      drawLine(centerX, topY, centerX, bottomY);
+      drawLine(leftX, centerY, rightX, centerY, lineThickness);
+      drawLine(centerX, topY, centerX, bottomY, lineThickness);
       break;
   }
 }

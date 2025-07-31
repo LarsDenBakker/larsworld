@@ -1,6 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react'
 import ControlPanel from './ControlPanel'
-import WorldMap from './WorldMap'
 import DomWorldMap from './DomWorldMap'
 
 interface ChunkCoordinate {
@@ -36,10 +35,8 @@ const WorldGenerator: React.FC = () => {
   const [totalChunks, setTotalChunks] = useState(0)
   const [statusMessage, setStatusMessage] = useState('')
   const [chunks, setChunks] = useState(new Map<string, ChunkData>())
-  const [renderMode, setRenderMode] = useState<'canvas' | 'dom'>('canvas')
 
   const worldMapRef = useRef<WorldMapRef>(null)
-  const domWorldMapRef = useRef<WorldMapRef>(null)
 
   // Private generation state
   const activeRequestsRef = useRef(0)
@@ -50,8 +47,8 @@ const WorldGenerator: React.FC = () => {
   const canvasSizeSetRef = useRef(false)
 
   const getWorldMap = useCallback(() => {
-    return renderMode === 'canvas' ? worldMapRef.current : domWorldMapRef.current
-  }, [renderMode])
+    return worldMapRef.current
+  }, [])
 
   const handleCoordinateChange = useCallback((changes: { [key: string]: number }) => {
     Object.keys(changes).forEach(key => {
@@ -75,10 +72,6 @@ const WorldGenerator: React.FC = () => {
 
   const handleWorldNameChange = useCallback((name: string) => {
     setWorldName(name)
-  }, [])
-
-  const handleRenderModeChange = useCallback((mode: 'canvas' | 'dom') => {
-    setRenderMode(mode)
   }, [])
 
   const generateRandomSeed = (): string => {
@@ -267,27 +260,17 @@ const WorldGenerator: React.FC = () => {
         isGenerating={isGenerating}
         isPaused={isPaused}
         statusMessage={statusMessage}
-        renderMode={renderMode}
         onCoordinateChange={handleCoordinateChange}
         onWorldNameChange={handleWorldNameChange}
         onStartGeneration={handleStartGeneration}
         onPauseGeneration={handlePauseGeneration}
-        onRenderModeChange={handleRenderModeChange}
       />
       
-      {renderMode === 'canvas' ? (
-        <WorldMap
-          ref={worldMapRef}
-          chunks={chunks}
-          isGenerating={isGenerating}
-        />
-      ) : (
-        <DomWorldMap
-          ref={domWorldMapRef}
-          chunks={chunks}
-          isGenerating={isGenerating}
-        />
-      )}
+      <DomWorldMap
+        ref={worldMapRef}
+        chunks={chunks}
+        isGenerating={isGenerating}
+      />
     </>
   )
 }

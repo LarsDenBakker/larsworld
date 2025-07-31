@@ -1,4 +1,5 @@
-import React, { useRef, useCallback, forwardRef, useImperativeHandle, useMemo } from 'react'
+import React, { useRef, useCallback, forwardRef, useImperativeHandle, useMemo, useState, useEffect } from 'react'
+import TileTooltip from './TileTooltip'
 import './DomWorldMap.css'
 
 interface ChunkData {
@@ -47,10 +48,44 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
   chunks, 
   isGenerating, 
   chunkSize = 16, 
-  tileSize = 4 
+  tileSize = 6 
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const boundsRef = useRef<{ minX: number, maxX: number, minY: number, maxY: number } | null>(null)
+  
+  // State for tooltip
+  const [tooltip, setTooltip] = useState<{
+    visible: boolean
+    x: number
+    y: number
+    tileData: {
+      biome: string
+      elevation: number
+      worldX: number
+      worldY: number
+      chunkX: number
+      chunkY: number
+      localX: number
+      localY: number
+    } | null
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    tileData: null
+  })
+
+  // Clear tooltip when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setTooltip(prev => ({ ...prev, visible: false }))
+      }
+    }
+    
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [])
 
   const setMapSize = useCallback((minX: number, maxX: number, minY: number, maxY: number) => {
     boundsRef.current = { minX, maxX, minY, maxY }
@@ -134,6 +169,55 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
             const globalY = (chunkY - minY) * chunkSize + y
             const color = getBiomeColor(tile.biome as BiomeKey, tile.elevation)
             
+            const handleTileHover = (event: React.MouseEvent) => {
+              const rect = event.currentTarget.getBoundingClientRect()
+              const clientX = event.clientX
+              const clientY = event.clientY
+              
+              setTooltip({
+                visible: true,
+                x: clientX,
+                y: clientY,
+                tileData: {
+                  biome: tile.biome,
+                  elevation: tile.elevation,
+                  worldX: globalX,
+                  worldY: globalY,
+                  chunkX: chunkX,
+                  chunkY: chunkY,
+                  localX: x,
+                  localY: y
+                }
+              })
+            }
+            
+            const handleTileLeave = () => {
+              setTooltip(prev => ({ ...prev, visible: false }))
+            }
+            
+            const handleTileClick = (event: React.MouseEvent) => {
+              // For touch devices or when tooltip is not visible, show tooltip on click
+              const rect = event.currentTarget.getBoundingClientRect()
+              const clientX = event.clientX
+              const clientY = event.clientY
+              
+              setTooltip(prev => ({
+                visible: !prev.visible || prev.tileData?.worldX !== globalX || prev.tileData?.worldY !== globalY,
+                x: clientX,
+                y: clientY,
+                tileData: {
+                  biome: tile.biome,
+                  elevation: tile.elevation,
+                  worldX: globalX,
+                  worldY: globalY,
+                  chunkX: chunkX,
+                  chunkY: chunkY,
+                  localX: x,
+                  localY: y
+                }
+              }))
+            }
+            
             tileElements.push(
               <div
                 key={`tile-${globalX}-${globalY}`}
@@ -143,6 +227,11 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
                   gridColumn: globalX + 1,
                   gridRow: globalY + 1
                 }}
+                onMouseEnter={handleTileHover}
+                onMouseLeave={handleTileLeave}
+                onClick={handleTileClick}
+                data-tile-x={globalX}
+                data-tile-y={globalY}
               />
             )
           }
@@ -178,6 +267,13 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
           Loading chunks... {chunks.size} loaded
         </div>
       )}
+      
+      <TileTooltip
+        x={tooltip.x}
+        y={tooltip.y}
+        visible={tooltip.visible}
+        tileData={tooltip.tileData}
+      />
     </div>
   )
 })

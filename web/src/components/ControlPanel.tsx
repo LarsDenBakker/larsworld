@@ -10,12 +10,10 @@ interface ControlPanelProps {
   isGenerating: boolean
   isPaused: boolean
   statusMessage: string
-  renderMode: 'canvas' | 'dom'
   onCoordinateChange: (changes: { [key: string]: number }) => void
   onWorldNameChange: (worldName: string) => void
   onStartGeneration: () => void
   onPauseGeneration: () => void
-  onRenderModeChange: (mode: 'canvas' | 'dom') => void
 }
 
 /**
@@ -30,12 +28,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   isGenerating,
   isPaused,
   statusMessage,
-  renderMode,
   onCoordinateChange,
   onWorldNameChange,
   onStartGeneration,
-  onPauseGeneration,
-  onRenderModeChange
+  onPauseGeneration
 }) => {
   const [canStart, setCanStart] = useState(true)
   const [estimatedSize, setEstimatedSize] = useState('')
@@ -141,20 +137,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             onChange={handleWorldNameChange}
             placeholder="Leave empty for random seed"
           />
-        </div>
-        
-        <div className="input-group">
-          <label htmlFor="renderMode">Rendering Mode</label>
-          <select
-            id="renderMode"
-            name="renderMode"
-            value={renderMode}
-            onChange={(e) => onRenderModeChange(e.target.value as 'canvas' | 'dom')}
-            disabled={isGenerating}
-          >
-            <option value="canvas">Canvas (Default)</option>
-            <option value="dom">DOM/CSS (Experimental)</option>
-          </select>
         </div>
       </div>
 

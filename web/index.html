@@ -3,107 +3,233 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LarsWorld - Procedural World Generator</title>
-    <link rel="stylesheet" href="style.css">
+    <title>LarsWorld - Chunk-Based World Generator</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        }
+        
+        /* Legend overlay for mobile */
+        .legend-overlay {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 1rem;
+            max-width: 200px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            z-index: 1000;
+            transition: transform 0.3s ease;
+        }
+        
+        .legend-toggle {
+            background: none;
+            border: none;
+            width: 100%;
+            text-align: left;
+            padding: 0.5rem 0;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .legend-content {
+            max-height: 400px;
+            overflow-y: auto;
+            transition: max-height 0.3s ease;
+        }
+        
+        .legend-content.collapsed {
+            max-height: 0;
+            overflow: hidden;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.85rem;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        
+        /* Biome colors */
+        .deep-ocean { background-color: #4169e1; }
+        .shallow-ocean { background-color: #6496e6; }
+        .desert { background-color: #eecbad; }
+        .tundra { background-color: #b0c4de; }
+        .arctic { background-color: #f8f8ff; }
+        .swamp { background-color: #556b2f; }
+        .grassland { background-color: #7cfc00; }
+        .forest { background-color: #228b22; }
+        .taiga { background-color: #487648; }
+        .savanna { background-color: #bdb76b; }
+        .tropical-forest { background-color: #006400; }
+        .alpine { background-color: #a9a9a9; }
+        
+        .legend-note {
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid #e5e7eb;
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
+        
+        @media (max-width: 768px) {
+            .legend-overlay {
+                top: auto;
+                bottom: 1rem;
+                right: 1rem;
+                left: 1rem;
+                max-width: none;
+            }
+            
+            .legend-content.collapsed {
+                display: none;
+            }
+        }
+    </style>
 </head>
 <body>
-    <header>
-        <h1>LarsWorld</h1>
-        <p class="subtitle">Procedural World Generator</p>
-    </header>
-    
-    <main id="map-section">
-        <div id="map-controls">
-            <button id="generate-paginated-btn" class="generate-btn">
-                <span class="btn-icon">🌍</span>
-                Generate World
-            </button>
-            
-            <div class="controls-grid">
-                <div class="control-group">
-                    <label for="seed-input">World Name (optional):</label>
-                    <input type="text" id="seed-input" value="" placeholder="Leave empty for random name">
-                </div>
-                <div class="control-group advanced-control">
-                    <label for="pagesize-input">World Detail Level:</label>
-                    <select id="pagesize-input" aria-label="Choose world detail level">
-                        <option value="32">Quick Preview</option>
-                        <option value="64" selected>Standard Quality</option>
-                        <option value="128">High Detail</option>
-                        <option value="256">Maximum Detail</option>
-                    </select>
-                </div>
+    <!-- Legend overlay -->
+    <aside class="legend-overlay">
+        <button class="legend-toggle" id="legend-toggle" aria-expanded="true">
+            <span>Legend</span>
+            <span id="legend-arrow">▼</span>
+        </button>
+        <div class="legend-content" id="legend-content">
+            <div class="legend-item">
+                <div class="legend-color deep-ocean"></div>
+                <span>Deep Ocean</span>
             </div>
-            
-            <div id="seed-display" class="seed-display" style="display: none;">
-                <strong>Generated with seed:</strong> <span id="current-seed"></span>
-                <button id="copy-seed" class="copy-btn" title="Copy seed">📋</button>
+            <div class="legend-item">
+                <div class="legend-color shallow-ocean"></div>
+                <span>Shallow Ocean</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color arctic"></div>
+                <span>Arctic</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color tundra"></div>
+                <span>Tundra</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color taiga"></div>
+                <span>Taiga</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color forest"></div>
+                <span>Forest</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color grassland"></div>
+                <span>Grassland</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color savanna"></div>
+                <span>Savanna</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color desert"></div>
+                <span>Desert</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color tropical-forest"></div>
+                <span>Tropical Forest</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color swamp"></div>
+                <span>Swamp</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color alpine"></div>
+                <span>Alpine</span>
+            </div>
+            <div class="legend-note">
+                <small>💡 Darker shades indicate higher elevation</small>
             </div>
         </div>
-        
-        <div id="map-container"></div>
-        
-        <aside id="legend">
-            <button id="legend-toggle" class="legend-toggle" aria-expanded="true" aria-controls="legend-content">
-                <h3>Legend</h3>
-                <span class="legend-arrow">▼</span>
-            </button>
-            <div id="legend-content" class="legend-content">
-                <div class="legend-item">
-                    <div class="legend-color deep-ocean"></div>
-                    <span>Deep Ocean</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color shallow-ocean"></div>
-                    <span>Shallow Ocean</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color arctic"></div>
-                    <span>Arctic</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color tundra"></div>
-                    <span>Tundra</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color taiga"></div>
-                    <span>Taiga</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color forest"></div>
-                    <span>Forest</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color grassland"></div>
-                    <span>Grassland</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color savanna"></div>
-                    <span>Savanna</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color desert"></div>
-                    <span>Desert</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color tropical-forest"></div>
-                    <span>Tropical Forest</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color swamp"></div>
-                    <span>Swamp</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color alpine"></div>
-                    <span>Alpine</span>
-                </div>
-                <div class="legend-note">
-                    <small>💡 Darker shades indicate higher elevation</small>
-                </div>
-            </div>
-        </aside>
-    </main>
+    </aside>
+
+    <!-- Import the chunk-based world map component -->
+    <script src="chunk-map.js"></script>
     
-    <script src="main.js"></script>
+    <script>
+        // Legend toggle functionality
+        document.addEventListener('DOMContentLoaded', () => {
+            const legendToggle = document.getElementById('legend-toggle');
+            const legendContent = document.getElementById('legend-content');
+            const legendArrow = document.getElementById('legend-arrow');
+            
+            if (legendToggle && legendContent) {
+                legendToggle.addEventListener('click', () => {
+                    const isExpanded = legendToggle.getAttribute('aria-expanded') === 'true';
+                    legendToggle.setAttribute('aria-expanded', !isExpanded);
+                    
+                    if (isExpanded) {
+                        legendContent.classList.add('collapsed');
+                        legendArrow.textContent = '▶';
+                    } else {
+                        legendContent.classList.remove('collapsed');
+                        legendArrow.textContent = '▼';
+                    }
+                });
+                
+                // Initialize mobile legend as collapsed
+                if (window.innerWidth <= 768) {
+                    legendToggle.setAttribute('aria-expanded', 'false');
+                    legendContent.classList.add('collapsed');
+                    legendArrow.textContent = '▶';
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+        
+        // Legend toggle functionality
+        document.addEventListener('DOMContentLoaded', () => {
+            const legendToggle = document.getElementById('legend-toggle');
+            const legendContent = document.getElementById('legend-content');
+            const legendArrow = document.getElementById('legend-arrow');
+            
+            if (legendToggle && legendContent) {
+                legendToggle.addEventListener('click', () => {
+                    const isExpanded = legendToggle.getAttribute('aria-expanded') === 'true';
+                    legendToggle.setAttribute('aria-expanded', !isExpanded);
+                    
+                    if (isExpanded) {
+                        legendContent.classList.add('collapsed');
+                        legendArrow.textContent = '▶';
+                    } else {
+                        legendContent.classList.remove('collapsed');
+                        legendArrow.textContent = '▼';
+                    }
+                });
+                
+                // Initialize mobile legend as collapsed
+                if (window.innerWidth <= 768) {
+                    legendToggle.setAttribute('aria-expanded', 'false');
+                    legendContent.classList.add('collapsed');
+                    legendArrow.textContent = '▶';
+                }
+            }
+        });
+    </script>
 </body>
 </html>

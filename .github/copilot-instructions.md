@@ -28,16 +28,26 @@ The test images are now part of the test suite and must be kept up to date.
 - The `package-lock.json` file is tracked in git and should be committed
 
 #### Playwright Setup (WORKING CONFIGURATION)
-**✅ WORKING SETUP**: System browser approach configured and tested
+**✅ WORKING SETUP**: System browser with headless mode and strict no-download policy
 
 **Configuration**: 
-- Modified `playwright.config.ts` to use `channel: 'chrome'` to use system Chrome browser
-- This avoids download issues and works reliably in sandboxed environments
-- No need to run `npm run test:install` - uses existing system browser
+- Modified `playwright.config.ts` to use `channel: 'chrome'` for system Chrome browser
+- Added `headless: true` to force headless mode in sandboxed environments
+- Added comprehensive launch options to prevent external connections and browser downloads
+- Disabled all background services, sync, translate, and other features that might trigger downloads
+- This completely avoids download issues and external connections, working reliably in sandboxed environments
+- No need to run `npm run test:install` - uses existing system browser exclusively
+
+**Key Configuration Changes**:
+- `headless: true` for sandboxed environments without X11/display
+- `--no-sandbox` and `--disable-dev-shm-usage` for sandboxed environments
+- `--disable-background-networking` and `--disable-sync` to prevent external connections
+- `--disable-features=Translate` and `--no-first-run` to avoid Google service calls
+- `--disable-extensions` and `--disable-plugins` for minimal surface area
 
 **Commands**:
 ```bash
-# Run E2E tests (using system Chrome)
+# Run E2E tests (using system Chrome with no downloads, headless mode)
 npm run test:e2e
 
 # For development and debugging
@@ -47,7 +57,7 @@ npm run test:e2e:ui
 npm run test:report
 ```
 
-**Key Insight**: The browser download often fails in sandboxed environments. Using the system browser via `channel: 'chrome'` is the most reliable approach.
+**Key Insight**: Browser downloads fail in sandboxed environments, Chrome may try to connect to Google services, and headed mode requires X11/display. Using system browser with headless mode and comprehensive launch options prevents all external connections, downloads, and display issues.
 
 #### Testing Workflow
 

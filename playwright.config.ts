@@ -29,6 +29,36 @@ export default defineConfig({
     /* Wait for network to be idle before proceeding */
     actionTimeout: 30000,
     navigationTimeout: 30000,
+
+    /* Launch options to prevent external connections and use system browser only */
+    launchOptions: {
+      args: [
+        '--no-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-extensions',
+        '--disable-plugins',
+        '--disable-default-apps',
+        '--disable-background-networking',
+        '--disable-background-sync',
+        '--disable-component-extensions-with-background-pages',
+        '--disable-sync',
+        '--disable-translate',
+        '--disable-features=TranslateUI',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--disable-features=Translate',
+        '--lang=en-US',
+        '--disable-features=VizDisplayCompositor',
+      ]
+    },
+    
+    /* Force headless mode for sandboxed environments */
+    headless: true,
   },
 
   /* Configure projects for major browsers */

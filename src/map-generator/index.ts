@@ -343,7 +343,8 @@ function generateRiverPath(startX: number, startY: number, seed: number, riverPa
     if (flowDirection.dx === 0 && flowDirection.dy === 0) {
       // Create a lake at this dead end if the river is long enough
       if (path.length > 15) {
-        createLake(currentX, currentY, lakes, 2 + Math.floor(random() * 3), seed); // Lake radius 2-4
+        const lakeSize = 3 + Math.floor(random() * 6); // Lake radius 3-8 for river endpoints
+        createLake(currentX, currentY, lakes, lakeSize, seed);
       }
       break;
     }
@@ -353,7 +354,8 @@ function generateRiverPath(startX: number, startY: number, seed: number, riverPa
     
     // Random chance to create a lake midway through longer rivers
     if (path.length > 20 && path.length % 30 === 0 && random() < 0.3) {
-      createLake(currentX, currentY, lakes, 1 + Math.floor(random() * 2), seed); // Smaller midway lakes
+      const lakeSize = 2 + Math.floor(random() * 4); // Smaller midway lakes, radius 2-5
+      createLake(currentX, currentY, lakes, lakeSize, seed);
     }
     
     // Move to next position
@@ -366,35 +368,106 @@ function generateRiverPath(startX: number, startY: number, seed: number, riverPa
     const lastSegment = path[path.length - 1];
     const finalElevation = calculateLandStrengthAtChunk(lastSegment.x, lastSegment.y, seed);
     if (finalElevation >= 0.5 && random() < 0.4) { // 40% chance of lake at river mouth
-      createLake(lastSegment.x, lastSegment.y, lakes, 3 + Math.floor(random() * 3), seed); // Larger mouth lakes
+      const lakeSize = 4 + Math.floor(random() * 8); // Larger mouth lakes, radius 4-11
+      createLake(lastSegment.x, lastSegment.y, lakes, lakeSize, seed);
     }
   }
   
-  // Convert path to river segments
+  // Convert path to river segments based on actual connections
   for (let i = 0; i < path.length; i++) {
     const segment = path[i];
     const key = `${segment.x},${segment.y}`;
     
-    // Determine river segment type based on flow direction
-    const flow = segment.flow;
+    // Determine river segment type based on path connections
+    const prevSegment = i > 0 ? path[i - 1] : null;
+    const nextSegment = i < path.length - 1 ? path[i + 1] : null;
+    
     let riverType: RiverType = 'none';
     
-    if (flow.dy === 0) {
-      // Pure horizontal flow
-      riverType = 'horizontal';
-    } else if (flow.dx === 0) {
-      // Pure vertical flow
-      riverType = 'vertical';
-    } else {
-      // Diagonal flow - use appropriate bend segments
-      if (flow.dx > 0 && flow.dy > 0) {
-        riverType = 'bend_se';
-      } else if (flow.dx > 0 && flow.dy < 0) {
-        riverType = 'bend_ne';
-      } else if (flow.dx < 0 && flow.dy > 0) {
-        riverType = 'bend_sw';
+    // Calculate directions from/to adjacent segments
+    let inDirection = null;
+    let outDirection = null;
+    
+    if (prevSegment) {
+      inDirection = {
+        dx: segment.x - prevSegment.x,
+        dy: segment.y - prevSegment.y
+      };
+    }
+    
+    if (nextSegment) {
+      outDirection = {
+        dx: nextSegment.x - segment.x,
+        dy: nextSegment.y - segment.y
+      };
+    }
+    
+    // If this is the start or end of the river, use the single direction
+    if (!prevSegment && nextSegment) {
+      // Start of river - use outgoing direction
+      const dir = outDirection!; // We know nextSegment exists so outDirection is not null
+      if (dir.dy === 0) riverType = 'horizontal';
+      else if (dir.dx === 0) riverType = 'vertical';
+      else if (dir.dx > 0 && dir.dy > 0) riverType = 'bend_se';
+      else if (dir.dx > 0 && dir.dy < 0) riverType = 'bend_ne';
+      else if (dir.dx < 0 && dir.dy > 0) riverType = 'bend_sw';
+      else riverType = 'bend_nw';
+    } else if (prevSegment && !nextSegment) {
+      // End of river - use incoming direction
+      const dir = inDirection!; // We know prevSegment exists so inDirection is not null
+      if (dir.dy === 0) riverType = 'horizontal';
+      else if (dir.dx === 0) riverType = 'vertical';
+      else if (dir.dx > 0 && dir.dy > 0) riverType = 'bend_se';
+      else if (dir.dx > 0 && dir.dy < 0) riverType = 'bend_ne';
+      else if (dir.dx < 0 && dir.dy > 0) riverType = 'bend_sw';
+      else riverType = 'bend_nw';
+    } else if (prevSegment && nextSegment && inDirection && outDirection) {
+      // Middle of river - determine if it's straight or a bend
+      const inDir = inDirection;
+      const outDir = outDirection;
+      
+      // If incoming and outgoing directions are the same, it's a straight segment
+      if (inDir.dx === outDir.dx && inDir.dy === outDir.dy) {
+        if (outDir.dy === 0) riverType = 'horizontal';
+        else if (outDir.dx === 0) riverType = 'vertical';
+        else if (outDir.dx > 0 && outDir.dy > 0) riverType = 'bend_se';
+        else if (outDir.dx > 0 && outDir.dy < 0) riverType = 'bend_ne';
+        else if (outDir.dx < 0 && outDir.dy > 0) riverType = 'bend_sw';
+        else riverType = 'bend_nw';
       } else {
-        riverType = 'bend_nw';
+        // It's a bend - determine the bend type based on incoming and outgoing directions
+        // Map directions to compass points for easier bend calculation
+        const dirToCompass = (dx: number, dy: number): string => {
+          if (dx === 0 && dy === -1) return 'N';
+          if (dx === 1 && dy === -1) return 'NE';
+          if (dx === 1 && dy === 0) return 'E';
+          if (dx === 1 && dy === 1) return 'SE';
+          if (dx === 0 && dy === 1) return 'S';
+          if (dx === -1 && dy === 1) return 'SW';
+          if (dx === -1 && dy === 0) return 'W';
+          if (dx === -1 && dy === -1) return 'NW';
+          return 'UNKNOWN';
+        };
+        
+        const inCompass = dirToCompass(inDir.dx, inDir.dy);
+        const outCompass = dirToCompass(outDir.dx, outDir.dy);
+        
+        // Determine bend type based on incoming and outgoing directions
+        const bendKey = `${inCompass}_${outCompass}`;
+        const bendMap: Record<string, RiverType> = {
+          'S_E': 'bend_se', 'E_S': 'bend_se',
+          'S_W': 'bend_sw', 'W_S': 'bend_sw',
+          'N_E': 'bend_ne', 'E_N': 'bend_ne',
+          'N_W': 'bend_nw', 'W_N': 'bend_nw',
+          'SE_E': 'bend_se', 'E_SE': 'bend_se',
+          'SW_W': 'bend_sw', 'W_SW': 'bend_sw',
+          'NE_E': 'bend_ne', 'E_NE': 'bend_ne',
+          'NW_W': 'bend_nw', 'W_NW': 'bend_nw',
+          'N_S': 'vertical', 'S_N': 'vertical',
+          'E_W': 'horizontal', 'W_E': 'horizontal'
+        };
+        
+        riverType = bendMap[bendKey] || 'horizontal'; // Default to horizontal if unclear
       }
     }
     
@@ -403,19 +476,50 @@ function generateRiverPath(startX: number, startY: number, seed: number, riverPa
 }
 
 /**
- * Create a lake at the specified location with given radius
+ * Create an irregular lake at the specified location with given approximate radius
+ * Lakes follow elevation patterns and have natural, non-circular shapes
  */
-function createLake(centerX: number, centerY: number, lakes: Set<string>, radius: number, seed: number = 12345): void {
-  for (let dy = -radius; dy <= radius; dy++) {
-    for (let dx = -radius; dx <= radius; dx++) {
+function createLake(centerX: number, centerY: number, lakes: Set<string>, baseRadius: number, seed: number = 12345): void {
+  // Create more varied lake sizes
+  const minRadius = Math.max(1, Math.floor(baseRadius * 0.7));
+  const maxRadius = Math.floor(baseRadius * 1.5 + 2);
+  const actualRadius = minRadius + Math.floor(seedRandom(seed + centerX * 1000 + centerY)() * (maxRadius - minRadius + 1));
+  
+  // Use noise to create irregular shoreline
+  const lakeNoise = new PerlinNoise(seed + centerX * 313 + centerY * 619);
+  const shorelineNoise = new PerlinNoise(seed + centerX * 97 + centerY * 241);
+  
+  // Get center elevation for reference
+  const centerElevation = calculateLandStrengthAtChunk(centerX, centerY, seed);
+  
+  // Create irregular lake boundary
+  for (let dy = -maxRadius - 2; dy <= maxRadius + 2; dy++) {
+    for (let dx = -maxRadius - 2; dx <= maxRadius + 2; dx++) {
+      const x = centerX + dx;
+      const y = centerY + dy;
+      const elevation = calculateLandStrengthAtChunk(x, y, seed);
+      
+      // Only create lakes on land areas
+      if (elevation < 0.5) continue;
+      
       const distance = Math.sqrt(dx * dx + dy * dy);
-      if (distance <= radius) {
-        const x = centerX + dx;
-        const y = centerY + dy;
-        const elevation = calculateLandStrengthAtChunk(x, y, seed);
-        
-        // Only create lakes on land areas
-        if (elevation >= 0.5) {
+      
+      // Base lake boundary with irregular edge
+      const noiseScale = 0.3; // Controls how jagged the shoreline is
+      const shorelineVariation = shorelineNoise.noise(x * noiseScale, y * noiseScale) * 0.7;
+      const irregularRadius = actualRadius + shorelineVariation * actualRadius * 0.4;
+      
+      // Additional elevation-based inclusion - prefer lower areas
+      const elevationDiff = centerElevation - elevation;
+      const elevationBonus = elevationDiff > 0 ? elevationDiff * 2 : 0; // Prefer lower elevations
+      
+      // Lake formation preference based on terrain
+      const terrainSuitability = lakeNoise.noise(x * 0.1, y * 0.1) * 0.5 + 0.5;
+      const finalRadius = irregularRadius + elevationBonus + (terrainSuitability - 0.5);
+      
+      if (distance <= finalRadius && distance <= maxRadius + 1) {
+        // Additional check to prevent lakes from being too large or extending into ocean
+        if (elevation >= 0.5 && elevation <= 0.8) { // Sweet spot for lake formation
           lakes.add(`${x},${y}`);
         }
       }
@@ -473,7 +577,7 @@ function generateStandaloneLakes(seed: number, refWidth: number, refHeight: numb
     // Use noise to determine lake suitability
     const lakeNoiseval = lakeNoise.octaveNoise(x * 0.01, y * 0.01, 3, 0.5);
     if (lakeNoiseval > 0.2) {
-      const radius = 2 + Math.floor(random() * 4); // Radius 2-5
+      const radius = 1 + Math.floor(random() * 8); // Much more varied radius 1-8
       standaloneLakes.push({ x, y, radius });
     }
   }

@@ -192,9 +192,9 @@ export class ControlPanel extends LitElement {
   constructor() {
     super();
     this.minX = 0;
-    this.maxX = 2;
+    this.maxX = 100;
     this.minY = 0;
-    this.maxY = 2;
+    this.maxY = 100;
     this.worldName = '';
     this.isGenerating = false;
     this.isPaused = false;
@@ -224,13 +224,8 @@ export class ControlPanel extends LitElement {
   }
 
   private _validateCoordinates() {
-    const chunkCount = (this.maxX - this.minX + 1) * (this.maxY - this.minY + 1);
-    const estimatedSizeBytes = chunkCount * 16 * 16 * 100; // Match the estimation
-    const maxSizeBytes = 6 * 1024 * 1024; // 6MB
-    
-    this.canStart = estimatedSizeBytes <= maxSizeBytes && 
-                   this.maxX >= this.minX && 
-                   this.maxY >= this.minY;
+    // Only validate that coordinates make sense (max >= min)
+    this.canStart = this.maxX >= this.minX && this.maxY >= this.minY;
   }
 
   private _handleInputChange(event: Event) {
@@ -264,15 +259,12 @@ export class ControlPanel extends LitElement {
 
   render() {
     const chunkCount = (this.maxX - this.minX + 1) * (this.maxY - this.minY + 1);
-    const estimatedSizeBytes = chunkCount * 16 * 16 * 100; // Match the validation calculation
-    const maxSizeBytes = 6 * 1024 * 1024;
-    const isOverLimit = estimatedSizeBytes > maxSizeBytes;
 
     return html`
       <div class="controls-container">
         <div class="coordinate-grid">
           <div class="input-group">
-            <label for="minX">Min X</label>
+            <label for="minX">Min Chunk X</label>
             <input
               type="number"
               id="minX"
@@ -285,7 +277,7 @@ export class ControlPanel extends LitElement {
             />
           </div>
           <div class="input-group">
-            <label for="maxX">Max X</label>
+            <label for="maxX">Max Chunk X</label>
             <input
               type="number"
               id="maxX"
@@ -298,7 +290,7 @@ export class ControlPanel extends LitElement {
             />
           </div>
           <div class="input-group">
-            <label for="minY">Min Y</label>
+            <label for="minY">Min Chunk Y</label>
             <input
               type="number"
               id="minY"
@@ -311,7 +303,7 @@ export class ControlPanel extends LitElement {
             />
           </div>
           <div class="input-group">
-            <label for="maxY">Max Y</label>
+            <label for="maxY">Max Chunk Y</label>
             <input
               type="number"
               id="maxY"
@@ -359,17 +351,12 @@ export class ControlPanel extends LitElement {
         <div class="info-section">
           <div class="info-row">
             <span>Chunks:</span>
-            <span>${chunkCount} chunks</span>
+            <span>${chunkCount} chunks (${chunkCount * 16 * 16} tiles)</span>
           </div>
           <div class="info-row">
-            <span>Estimated size:</span>
-            <span class="${isOverLimit ? 'warning' : ''}">${this.estimatedSize}</span>
+            <span>Area:</span>
+            <span>${(this.maxX - this.minX + 1) * 16} × ${(this.maxY - this.minY + 1) * 16} tiles</span>
           </div>
-          ${isOverLimit ? html`
-            <div class="info-row">
-              <span class="warning">⚠️ Size exceeds 6MB limit!</span>
-            </div>
-          ` : ''}
         </div>
 
         ${this.statusMessage ? html`

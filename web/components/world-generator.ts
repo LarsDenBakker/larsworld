@@ -47,15 +47,16 @@ export class WorldGenerator extends LitElement {
   private loadingQueue: ChunkCoordinate[] = [];
   private chunks = new Map<string, ChunkData>();
   private seed = '';
+  private batchSize = 200; // Conservative batch size to stay under 6MB
 
   constructor() {
     super();
     this.isGenerating = false;
     this.isPaused = false;
     this.minX = 0;
-    this.maxX = 2;
+    this.maxX = 100;
     this.minY = 0;
-    this.maxY = 2;
+    this.maxY = 100;
     this.worldName = '';
     this.loadedChunks = 0;
     this.totalChunks = 0;
@@ -192,9 +193,24 @@ export class WorldGenerator extends LitElement {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const chunkData: ChunkData = await response.json();
+      const chunkResponse = await response.json();
       
-      // Add chunk to map and render
+      // Convert response format to the expected ChunkData format
+      const chunkData: ChunkData = {};
+      for (let y = 0; y < 16; y++) {
+        for (let x = 0; x < 16; x++) {
+          const tileIndex = y * 16 + x;
+          const tile = chunkResponse.tiles[y][x];
+          
+          // Convert compact tile format to expected format
+          chunkData[tileIndex] = {
+            biome: this._getBiomeFromCompactTile(tile),
+            elevation: tile.e / 255
+          };
+        }
+      }
+      
+      // Add chunk to map and render with fade animation
       this.chunks.set(`${chunkX},${chunkY}`, chunkData);
       this.worldMap?.addChunk(chunkX, chunkY, chunkData, this.minX, this.minY);
       
@@ -212,6 +228,15 @@ export class WorldGenerator extends LitElement {
         this._processQueue();
       }
     }
+  }
+
+  private _getBiomeFromCompactTile(tile: any): string {
+    // Map biome indices to biome names based on BIOME_TYPES from shared/types.ts
+    const biomes = [
+      'deep_ocean', 'shallow_ocean', 'desert', 'tundra', 'arctic', 'swamp',
+      'grassland', 'forest', 'taiga', 'savanna', 'tropical_forest', 'alpine'
+    ];
+    return biomes[tile.b] || 'grassland';
   }
 
   render() {

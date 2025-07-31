@@ -7,6 +7,7 @@ export interface Tile {
   moisture: number; // 0-1, where 0 is driest, 1 is wettest
   biome: BiomeType; // Calculated biome based on elevation, temperature, moisture
   elevationType: ElevationType; // Calculated elevation category
+  river: RiverType; // River segment type at this tile
 }
 
 // Import shared types for paginated generation
@@ -19,6 +20,7 @@ import {
   tileToCompact,
   BiomeType,
   ElevationType,
+  RiverType,
   classifyBiome,
   getElevationType,
   CHUNK_SIZE
@@ -156,6 +158,114 @@ function seedRandom(seed: number): () => number {
 
 
 
+
+/**
+ * Calculate the flow direction based on elevation gradients (simplified)
+ * Returns the direction water would flow from this tile
+ */
+function calculateFlowDirection(x: number, y: number, seed: number): { dx: number, dy: number } {
+  // Sample elevation at neighboring tiles (simplified to 4 cardinal directions)
+  const directions = [
+    { dx: 0, dy: -1 }, // North
+    { dx: 1, dy: 0 },  // East
+    { dx: 0, dy: 1 },  // South
+    { dx: -1, dy: 0 }  // West
+  ];
+  
+  const currentElevation = calculateLandStrengthAtChunk(x, y, seed);
+  let steepestDrop = 0;
+  let flowDirection = { dx: 0, dy: 0 };
+  
+  for (const dir of directions) {
+    const neighborX = x + dir.dx;
+    const neighborY = y + dir.dy;
+    const neighborElevation = calculateLandStrengthAtChunk(neighborX, neighborY, seed);
+    
+    const elevationDrop = currentElevation - neighborElevation;
+    if (elevationDrop > steepestDrop) {
+      steepestDrop = elevationDrop;
+      flowDirection = dir;
+    }
+  }
+  
+  return flowDirection;
+}
+
+/**
+ * Determine if a location should be a river source (simplified)
+ * River sources are placed at high elevation areas
+ */
+function isRiverSource(x: number, y: number, seed: number): boolean {
+  const elevation = calculateLandStrengthAtChunk(x, y, seed);
+  
+  // Only land tiles can be river sources
+  if (elevation < 0.5) return false;
+  
+  // Adjust threshold to actual land elevation range (0.51-1.0)
+  // Use relative positioning within land range for sources
+  if (elevation < 0.52) return false; // Only use higher land areas
+  
+  // Use deterministic noise to place river sources sparsely
+  const sourceNoise = new PerlinNoise(seed + 1000);
+  const sourceValue = sourceNoise.noise(x * 0.02, y * 0.02);
+  
+  // More balanced source placement 
+  return sourceValue > 0.3;
+}
+
+/**
+ * Calculate simplified flow accumulation using noise
+ */
+function calculateFlowAccumulation(x: number, y: number, seed: number): number {
+  const drainageNoise = new PerlinNoise(seed + 2000);
+  
+  // Use noise to simulate drainage patterns, but make it sparser
+  const drainageValue = drainageNoise.octaveNoise(x * 0.02, y * 0.02, 2, 0.5);
+  
+  // Convert to positive values and scale down for less dense rivers
+  return (drainageValue + 1) * 1.5;
+}
+
+/**
+ * Determine the river segment type (simplified)
+ */
+function calculateRiverType(x: number, y: number, seed: number): RiverType {
+  const elevation = calculateLandStrengthAtChunk(x, y, seed);
+  
+  // No rivers in ocean
+  if (elevation < 0.5) return 'none';
+  
+  const flowAccumulation = calculateFlowAccumulation(x, y, seed);
+  const isSource = isRiverSource(x, y, seed);
+  
+  // Balanced threshold for river presence
+  const riverThreshold = isSource ? 1.2 : 2.0;
+  
+  if (flowAccumulation < riverThreshold) return 'none';
+  
+  const flowDirection = calculateFlowDirection(x, y, seed);
+  
+  // If no clear flow direction, no river
+  if (flowDirection.dx === 0 && flowDirection.dy === 0) return 'none';
+  
+  // Determine segment type based on flow direction (simplified)
+  if (flowDirection.dy === 0) {
+    return 'horizontal';
+  } else if (flowDirection.dx === 0) {
+    return 'vertical';
+  } else {
+    // For diagonal flow, randomly pick a bend type based on direction
+    if (flowDirection.dx > 0 && flowDirection.dy > 0) {
+      return 'bend_se';
+    } else if (flowDirection.dx > 0 && flowDirection.dy < 0) {
+      return 'bend_ne';
+    } else if (flowDirection.dx < 0 && flowDirection.dy > 0) {
+      return 'bend_sw';
+    } else {
+      return 'bend_nw';
+    }
+  }
+}
 
 /**
  * Calculate land strength for a single coordinate using the same continental generation
@@ -334,6 +444,9 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
   const biome = classifyBiome(elevation, temperature, moisture);
   const elevationType = getElevationType(elevation);
   
+  // Generate river information
+  const river = calculateRiverType(x, y, seed);
+  
   return {
     type: tileType,
     x,
@@ -342,7 +455,8 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
     temperature,
     moisture,
     biome,
-    elevationType
+    elevationType,
+    river
   };
 }
 

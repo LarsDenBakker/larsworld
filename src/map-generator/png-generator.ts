@@ -4,7 +4,7 @@
  */
 import sharp from 'sharp';
 import { Tile } from './index.js';
-import { BiomeType, ElevationType } from '../shared/types.js';
+import { BiomeType, ElevationType, RiverType } from '../shared/types.js';
 
 export interface PngGenerationOptions {
   width: number;
@@ -12,6 +12,7 @@ export interface PngGenerationOptions {
   cellSize?: number; // Size of each tile in pixels
   showElevation?: boolean; // Whether to color by elevation
   showBiomes?: boolean; // Whether to show biome colors (default: true)
+  showRivers?: boolean; // Whether to overlay rivers (default: true)
 }
 
 /**
@@ -47,13 +48,36 @@ function applyElevationShading(baseColor: [number, number, number], elevation: n
 }
 
 /**
+ * Apply river overlay to a base terrain color
+ * Rivers are rendered as blue lines with varying intensity
+ */
+function applyRiverOverlay(baseColor: [number, number, number], riverType: RiverType): [number, number, number] {
+  if (riverType === 'none') {
+    return baseColor;
+  }
+  
+  // River color - bright blue
+  const riverColor: [number, number, number] = [64, 164, 223];
+  
+  // Blend river with terrain - rivers are prominent but don't completely hide terrain
+  const riverStrength = 0.7; // 70% river, 30% terrain
+  const terrainStrength = 1 - riverStrength;
+  
+  return [
+    Math.floor(baseColor[0] * terrainStrength + riverColor[0] * riverStrength),
+    Math.floor(baseColor[1] * terrainStrength + riverColor[1] * riverStrength),
+    Math.floor(baseColor[2] * terrainStrength + riverColor[2] * riverStrength)
+  ];
+}
+
+/**
  * Generate a PNG image from a map of tiles
  */
 export async function generateMapPng(
   map: Tile[][],
   options: PngGenerationOptions
 ): Promise<Buffer> {
-  const { width, height, cellSize = 1, showElevation = false, showBiomes = true } = options;
+  const { width, height, cellSize = 1, showElevation = false, showBiomes = true, showRivers = true } = options;
   const imageWidth = width * cellSize;
   const imageHeight = height * cellSize;
   
@@ -69,37 +93,44 @@ export async function generateMapPng(
         // Use biome colors with elevation shading
         const baseColor = BIOME_COLORS[tile.biome as BiomeType] || [128, 128, 128]; // Fallback gray
         const shadedColor = applyElevationShading(baseColor, tile.elevation);
-        color = [shadedColor[0], shadedColor[1], shadedColor[2], 255];
+        const finalColor = showRivers ? applyRiverOverlay(shadedColor, tile.river) : shadedColor;
+        color = [finalColor[0], finalColor[1], finalColor[2], 255];
       } else if (showElevation) {
         // Legacy elevation-based coloring
         const elevation = tile.elevation;
+        let baseColor: [number, number, number];
         if (tile.type === 'ocean') {
           // Ocean: dark blue to light blue based on depth
           const blue = Math.floor(30 + elevation * 100);
-          color = [0, 20, blue, 255];
+          baseColor = [0, 20, blue];
         } else {
           // Land: green to brown to white based on elevation
           if (elevation < 0.4) {
             // Low land - green
             const green = Math.floor(100 + elevation * 300);
-            color = [50, green, 50, 255];
+            baseColor = [50, green, 50];
           } else if (elevation < 0.7) {
             // Medium elevation - brown
             const brown = Math.floor(elevation * 255);
-            color = [brown, brown * 0.6, brown * 0.3, 255];
+            baseColor = [brown, brown * 0.6, brown * 0.3];
           } else {
             // High elevation - white (snow/ice)
             const white = Math.floor(200 + elevation * 55);
-            color = [white, white, white, 255];
+            baseColor = [white, white, white];
           }
         }
+        const finalColor = showRivers ? applyRiverOverlay(baseColor, tile.river) : baseColor;
+        color = [finalColor[0], finalColor[1], finalColor[2], 255];
       } else {
         // Simple tile type coloring (fallback)
+        let baseColor: [number, number, number];
         if (tile.type === 'ocean') {
-          color = [30, 144, 255, 255]; // Dodger blue
+          baseColor = [30, 144, 255]; // Dodger blue
         } else {
-          color = [34, 139, 34, 255]; // Forest green
+          baseColor = [34, 139, 34]; // Forest green
         }
+        const finalColor = showRivers ? applyRiverOverlay(baseColor, tile.river) : baseColor;
+        color = [finalColor[0], finalColor[1], finalColor[2], 255];
       }
       
       // Fill pixels for this tile

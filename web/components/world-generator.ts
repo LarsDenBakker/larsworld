@@ -61,6 +61,7 @@ export class WorldGenerator extends LitElement {
   private loadingQueue: ChunkCoordinate[] = [];
   private seed = '';
   private batchSize = 200; // Conservative batch size to stay under 6MB
+  private canvasSizeSet = false; // Flag to ensure setMapSize is called once
 
   constructor() {
     super();
@@ -122,6 +123,7 @@ export class WorldGenerator extends LitElement {
     this.chunks.clear();
     // Trigger reactive update by reassigning the Map
     this.chunks = new Map(this.chunks);
+    this.canvasSizeSet = false; // Reset canvas size flag
     
     // Generate or use provided seed
     this.seed = this.worldName || this._generateRandomSeed();
@@ -129,11 +131,6 @@ export class WorldGenerator extends LitElement {
     // Calculate total chunks and set up queue
     this.totalChunks = (this.maxX - this.minX + 1) * (this.maxY - this.minY + 1);
     this.statusMessage = `Starting generation of ${this.totalChunks} chunks...`;
-    
-    // Set up the world map canvas
-    const worldMap = this._getWorldMap();
-    worldMap?.setMapSize(this.minX, this.maxX, this.minY, this.maxY);
-    worldMap?.clear();
     
     // Generate diagonal loading queue
     this.loadingQueue = this._generateDiagonalQueue();
@@ -222,6 +219,16 @@ export class WorldGenerator extends LitElement {
       // Process each chunk in the batch
       for (const chunkResponse of batchData.chunks) {
         const { chunkX, chunkY, tiles } = chunkResponse;
+        
+        // Set canvas size before processing first chunk
+        if (!this.canvasSizeSet) {
+          const worldMap = this._getWorldMap();
+          if (worldMap) {
+            worldMap.setMapSize(this.minX, this.maxX, this.minY, this.maxY);
+            worldMap.clear();
+            this.canvasSizeSet = true;
+          }
+        }
         
         // Convert response format to the expected ChunkData format
         const chunkData: ChunkData = {};

@@ -114,8 +114,25 @@ npm test
 5. `specs/world-generator.md` - Specifications
 
 #### Important Notes for AI
+- **CRITICAL: All tests must pass before pushing any changes**
+  - Run `npm test` (unit + component + e2e tests) before every commit
+  - Frontend changes require E2E tests to verify map rendering functionality
+  - Never push code with failing tests or broken functionality
 - Test images are now automatically generated during unit tests
 - No more elevation images - only simple land/ocean visualizations
 - Always validate ocean coverage for 60×60 chunk maps
 - Use chunk-based generation exclusively (legacy removed)
 - Playwright configured to use system browser - no downloads needed
+
+#### Testing Requirements Before Commits
+```bash
+# Always run complete test suite before pushing
+npm ci           # Clean install
+npm run build    # Verify build works
+npm test         # Run all tests (unit + component + e2e)
+
+# Tests must all pass:
+# ✅ Unit tests (world generator)
+# ✅ Component tests (frontend UI)  
+# ✅ E2E tests (map rendering verification)
+```

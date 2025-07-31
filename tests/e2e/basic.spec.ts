@@ -35,11 +35,11 @@ test.describe('LarsWorld Lit-Based Chunk UI', () => {
     
     const controlPanel = page.locator('control-panel');
     
-    // Check default coordinate values
+    // Check default coordinate values (updated to match new defaults)
     await expect(controlPanel.locator('input[name="minX"]')).toHaveValue('0');
-    await expect(controlPanel.locator('input[name="maxX"]')).toHaveValue('2');
+    await expect(controlPanel.locator('input[name="maxX"]')).toHaveValue('100');
     await expect(controlPanel.locator('input[name="minY"]')).toHaveValue('0');
-    await expect(controlPanel.locator('input[name="maxY"]')).toHaveValue('2');
+    await expect(controlPanel.locator('input[name="maxY"]')).toHaveValue('100');
   });
 
   test('should display legend with biome information', async ({ page }) => {
@@ -111,10 +111,10 @@ test.describe('LarsWorld Lit-Based Chunk UI', () => {
     
     // Check that info section displays chunk count and size
     await expect(controlPanel.locator('.info-section')).toContainText('chunks');
-    await expect(controlPanel.locator('.info-section')).toContainText('MB');
+    await expect(controlPanel.locator('.info-section')).toContainText('tiles');
     
-    // Default 3x3 should show 9 chunks
-    await expect(controlPanel.locator('.info-section')).toContainText('9 chunks');
+    // Default 101x101 should show 10201 chunks
+    await expect(controlPanel.locator('.info-section')).toContainText('10201 chunks');
   });
 
   test('should show legend toggle functionality on mobile', async ({ page }) => {
@@ -136,5 +136,91 @@ test.describe('LarsWorld Lit-Based Chunk UI', () => {
     // Check that content visibility changes
     const content = legend.locator('.legend-content');
     await expect(content).toBeVisible();
+  });
+
+  test('should display world map placeholder initially', async ({ page }) => {
+    await page.goto('/');
+    
+    // Check that world-map component is present
+    const worldMap = page.locator('world-map');
+    await expect(worldMap).toBeVisible();
+    
+    // Should show placeholder message initially
+    await expect(worldMap).toContainText('Click "Start Generation" to create a world');
+  });
+
+  test('should render canvas after successful generation', async ({ page }) => {
+    await page.goto('/');
+    
+    // Set smaller coordinates for faster testing (3x3 grid)
+    const controlPanel = page.locator('control-panel');
+    await controlPanel.locator('input[name="maxX"]').fill('2');
+    await controlPanel.locator('input[name="maxY"]').fill('2');
+    
+    // Verify area updated to 9 chunks
+    await expect(controlPanel.locator('.info-section')).toContainText('9 chunks');
+    
+    // Start generation
+    await controlPanel.locator('.start-button').click();
+    
+    // Wait for generation to complete
+    await expect(controlPanel).toContainText('Generation complete!');
+    
+    // Verify canvas is present and visible
+    const canvas = page.locator('world-map canvas');
+    await expect(canvas).toBeVisible();
+    
+    // Verify canvas has content (not just placeholder)
+    const canvasExists = await page.evaluate(() => {
+      const appMain = document.querySelector('app-main');
+      const worldGenerator = appMain?.shadowRoot?.querySelector('world-generator');
+      const worldMap = worldGenerator?.shadowRoot?.querySelector('world-map');
+      const canvas = worldMap?.shadowRoot?.querySelector('canvas');
+      
+      return {
+        canvasExists: !!canvas,
+        hasContent: canvas && canvas.width > 0 && canvas.height > 0,
+        chunkCount: worldMap?.chunks?.size || 0
+      };
+    });
+    
+    expect(canvasExists.canvasExists).toBe(true);
+    expect(canvasExists.hasContent).toBe(true);
+    expect(canvasExists.chunkCount).toBe(9);
+  });
+
+  test('should handle coordinate changes and update estimates', async ({ page }) => {
+    await page.goto('/');
+    
+    const controlPanel = page.locator('control-panel');
+    
+    // Test coordinate input functionality with smaller values
+    await controlPanel.locator('input[name="minX"]').fill('1');
+    await controlPanel.locator('input[name="maxX"]').fill('3');
+    await controlPanel.locator('input[name="minY"]').fill('2');
+    await controlPanel.locator('input[name="maxY"]').fill('4');
+    
+    // Verify values
+    await expect(controlPanel.locator('input[name="minX"]')).toHaveValue('1');
+    await expect(controlPanel.locator('input[name="maxX"]')).toHaveValue('3');
+    await expect(controlPanel.locator('input[name="minY"]')).toHaveValue('2');
+    await expect(controlPanel.locator('input[name="maxY"]')).toHaveValue('4');
+    
+    // Check that the area estimation updated (3x3 = 9 chunks)
+    await expect(controlPanel.locator('.info-section')).toContainText('9 chunks');
+  });
+
+  test('should validate coordinate ranges', async ({ page }) => {
+    await page.goto('/');
+    
+    const controlPanel = page.locator('control-panel');
+    
+    // Set invalid range where max < min
+    await controlPanel.locator('input[name="minX"]').fill('5');
+    await controlPanel.locator('input[name="maxX"]').fill('2'); // Invalid: max < min
+    
+    // Start button should be disabled for invalid ranges
+    const startButton = controlPanel.locator('.start-button');
+    await expect(startButton).toBeDisabled();
   });
 });

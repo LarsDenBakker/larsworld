@@ -136,6 +136,9 @@ export class WorldMap extends LitElement {
   }
 
   setMapSize(minX: number, maxX: number, minY: number, maxY: number) {
+    // Ensure canvas is initialized
+    this._initializeCanvas();
+    
     if (!this.canvas) return;
 
     const widthChunks = maxX - minX + 1;

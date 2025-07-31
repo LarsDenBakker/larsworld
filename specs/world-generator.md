@@ -23,3 +23,16 @@
 
 # Tiles types
 - The possible tile types are land and ocean.
+
+# Rivers
+- Rivers are generated on land tiles to create realistic waterways
+- Each tile can contain a river segment with the following types:
+  - none: No river segment
+  - horizontal: Horizontal river flow (west-east)
+  - vertical: Vertical river flow (north-south)  
+  - bend_ne, bend_nw, bend_se, bend_sw: Bends from cardinal directions
+  - bend_en, bend_es, bend_wn, bend_ws: Bends to cardinal directions
+- Rivers follow elevation gradients, flowing from high to low elevation areas
+- River sources are placed at higher elevation areas using deterministic noise
+- River generation is deterministic based on seed and coordinates
+- Rivers are visualized as blue overlays on the terrain in PNG output

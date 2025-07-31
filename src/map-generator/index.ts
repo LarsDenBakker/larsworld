@@ -180,9 +180,9 @@ function calculateFlowDirection(x: number, y: number, seed: number): { dx: numbe
   let bestDirection = { dx: 0, dy: 0 };
   let bestScore = -1;
   
-  // Add some randomness for natural meandering
-  const meander = new PerlinNoise(seed + 5000);
-  const meanderValue = meander.noise(x * 0.05, y * 0.05);
+  // Add some randomness for natural meandering using cached noise
+  const riverNoise = getRiverNoiseGenerators(seed);
+  const meanderValue = riverNoise.meander.noise(x * 0.05, y * 0.05);
   
   for (const dir of directions) {
     const neighborX = x + dir.dx;
@@ -231,9 +231,9 @@ function isRiverSource(x: number, y: number, seed: number): boolean {
   let moisture = noiseGenerators.moisture.octaveNoise(x * 0.012, y * 0.012, 4, 0.4);
   moisture = (moisture + 1) / 2; // Normalize to 0-1
   
-  // Use noise to determine river source placement with elevation and moisture weighting
-  const sourceNoise = new PerlinNoise(seed + 1000);
-  const sourceValue = sourceNoise.octaveNoise(x * 0.008, y * 0.008, 3, 0.6);
+  // Use cached noise to determine river source placement with elevation and moisture weighting
+  const riverNoise = getRiverNoiseGenerators(seed);
+  const sourceValue = riverNoise.source.octaveNoise(x * 0.008, y * 0.008, 3, 0.6);
   
   // River sources prefer relatively higher elevation within the land range
   const relativeElevation = (elevation - 0.5) / 0.5; // Normalize within land range
@@ -256,14 +256,13 @@ function isRiverSource(x: number, y: number, seed: number): boolean {
  * Simulates water collection and drainage patterns across the landscape
  */
 function calculateFlowAccumulation(x: number, y: number, seed: number): number {
-  const drainageNoise = new PerlinNoise(seed + 2000);
-  const watershedNoise = new PerlinNoise(seed + 3000);
+  const riverNoise = getRiverNoiseGenerators(seed);
   
   // Primary drainage pattern - broad river valleys
-  const primaryDrainage = drainageNoise.octaveNoise(x * 0.006, y * 0.006, 4, 0.6);
+  const primaryDrainage = riverNoise.drainage.octaveNoise(x * 0.006, y * 0.006, 4, 0.6);
   
   // Secondary watershed patterns - tributary networks
-  const secondaryDrainage = watershedNoise.octaveNoise(x * 0.015, y * 0.015, 3, 0.5);
+  const secondaryDrainage = riverNoise.watershed.octaveNoise(x * 0.015, y * 0.015, 3, 0.5);
   
   // Elevation-based flow accumulation - adjust for the actual elevation range
   const elevation = calculateLandStrengthAtChunk(x, y, seed);
@@ -520,6 +519,37 @@ function getTileNoiseGenerators(seed: number): TileNoiseGenerators {
 }
 
 /**
+ * Optimized noise generators cache for rivers
+ */
+interface RiverNoiseGenerators {
+  drainage: PerlinNoise;
+  watershed: PerlinNoise;
+  source: PerlinNoise;
+  meander: PerlinNoise;
+}
+
+const riverNoiseCache = new Map<number, RiverNoiseGenerators>();
+
+/**
+ * Get or create cached river noise generators for a seed
+ */
+function getRiverNoiseGenerators(seed: number): RiverNoiseGenerators {
+  if (riverNoiseCache.has(seed)) {
+    return riverNoiseCache.get(seed)!;
+  }
+  
+  const noiseGenerators: RiverNoiseGenerators = {
+    drainage: new PerlinNoise(seed + 2000),
+    watershed: new PerlinNoise(seed + 3000),
+    source: new PerlinNoise(seed + 1000),
+    meander: new PerlinNoise(seed + 5000)
+  };
+  
+  riverNoiseCache.set(seed, noiseGenerators);
+  return noiseGenerators;
+}
+
+/**
  * Optimized tile generation with cached noise generators
  */
 function generateTileAtChunk(x: number, y: number, seed: number): Tile {
@@ -594,15 +624,17 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
 export function clearGenerationCaches(): void {
   continentCache.clear();
   tileNoiseCache.clear();
+  riverNoiseCache.clear();
 }
 
 /**
  * Get cache statistics for debugging
  */
-export function getCacheStats(): { continents: number, tileNoise: number } {
+export function getCacheStats(): { continents: number, tileNoise: number, riverNoise: number } {
   return {
     continents: continentCache.size,
-    tileNoise: tileNoiseCache.size
+    tileNoise: tileNoiseCache.size,
+    riverNoise: riverNoiseCache.size
   };
 }
 

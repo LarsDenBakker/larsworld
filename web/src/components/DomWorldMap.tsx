@@ -44,8 +44,8 @@ const BIOME_COLORS: Record<BiomeKey, string> = {
 const PLACEHOLDER_COLOR = '#e5e7eb'
 
 /**
- * DOM-based world map component with fixed-size grid and placeholder tiles
- * Eliminates flickering and zoom issues by pre-creating stable layout
+ * DOM-based world map component using CSS Grid for optimal performance
+ * Creates static grid structure instantly, then paints chunks progressively
  */
 const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({ 
   chunks, 
@@ -56,30 +56,11 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
   const containerRef = useRef<HTMLDivElement>(null)
   const boundsRef = useRef<{ minX: number, maxX: number, minY: number, maxY: number } | null>(null)
   const tilesMapRef = useRef<Map<string, HTMLDivElement>>(new Map())
-  const tileCreationRef = useRef<{ 
-    isCreating: boolean
-    cancelToken: { cancelled: boolean }
-    currentIndex: number
-    totalTiles: number
-  }>({ isCreating: false, cancelToken: { cancelled: false }, currentIndex: 0, totalTiles: 0 })
   
   // State for bounds to trigger re-render
   const [bounds, setBounds] = useState<{ minX: number, maxX: number, minY: number, maxY: number } | null>(null)
   
-  // State for tile creation progress
-  const [tileCreationProgress, setTileCreationProgress] = useState<{
-    isCreating: boolean
-    current: number
-    total: number
-    percentage: number
-  }>({
-    isCreating: false,
-    current: 0,
-    total: 0,
-    percentage: 0
-  })
-  
-  // State for tooltip only
+  // Single tooltip state and DOM node
   const [tooltip, setTooltip] = useState<{
     visible: boolean
     x: number
@@ -136,74 +117,37 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
     return `rgb(${r}, ${g}, ${b})`
   }
 
-  // Create placeholder tiles progressively when bounds are set
-  const createPlaceholderTilesProgressively = useCallback(async () => {
+  // Create complete grid structure instantly when bounds are set
+  const createStaticGrid = useCallback(() => {
     if (!bounds || !containerRef.current) return
 
     const { minX, maxX, minY, maxY } = bounds
     const container = containerRef.current
     
-    // Clear existing tiles and cancel any ongoing creation
+    // Clear existing tiles
     container.innerHTML = ''
     tilesMapRef.current.clear()
-    
-    // Cancel previous tile creation if running
-    if (tileCreationRef.current.isCreating) {
-      tileCreationRef.current.cancelToken.cancelled = true
-    }
 
-    // Set container size upfront - this is fixed and won't change
+    // Calculate grid dimensions
     const widthChunks = maxX - minX + 1
     const heightChunks = maxY - minY + 1
-    const totalWidth = widthChunks * chunkSize * tileSize
-    const totalHeight = heightChunks * chunkSize * tileSize
-    const totalTiles = widthChunks * heightChunks * chunkSize * chunkSize
-    
-    container.style.width = `${totalWidth}px`
-    container.style.height = `${totalHeight}px`
+    const totalCols = widthChunks * chunkSize
+    const totalRows = heightChunks * chunkSize
 
-    // Set up new creation session
-    const cancelToken = { cancelled: false }
-    tileCreationRef.current = {
-      isCreating: true,
-      cancelToken,
-      currentIndex: 0,
-      totalTiles
-    }
+    // Set up CSS Grid container
+    container.style.display = 'grid'
+    container.style.gridTemplateColumns = `repeat(${totalCols}, ${tileSize}px)`
+    container.style.gridTemplateRows = `repeat(${totalRows}, ${tileSize}px)`
+    container.style.gap = '1px' // CSS grid gap for separators
+    container.style.padding = '20px'
+    container.style.overflow = 'auto'
+    container.style.width = '100%'
+    container.style.height = '100%'
+    container.style.boxSizing = 'border-box'
 
-    setTileCreationProgress({
-      isCreating: true,
-      current: 0,
-      total: totalTiles,
-      percentage: 0
-    })
-
-    // Create tiles progressively in batches
-    const batchSize = 100 // Create 100 tiles per frame for smooth rendering
-    let tilesCreated = 0
-    
-    const createBatch = () => {
-      if (cancelToken.cancelled) {
-        // Creation was cancelled
-        setTileCreationProgress({
-          isCreating: false,
-          current: 0,
-          total: 0,
-          percentage: 0
-        })
-        return
-      }
-
-      const batchStart = performance.now()
-      let batchCount = 0
-      
-      // Create tiles up to batch size or until done
-      while (batchCount < batchSize && tilesCreated < totalTiles) {
-        // Calculate tile coordinates
-        const tilesPerRow = widthChunks * chunkSize
-        const globalY = Math.floor(tilesCreated / tilesPerRow)
-        const globalX = tilesCreated % tilesPerRow
-        
+    // Create all tiles at once (no progressive creation)
+    for (let globalY = 0; globalY < totalRows; globalY++) {
+      for (let globalX = 0; globalX < totalCols; globalX++) {
         // Calculate chunk and local coordinates
         const chunkX = minX + Math.floor(globalX / chunkSize)
         const chunkY = minY + Math.floor(globalY / chunkSize)
@@ -213,13 +157,8 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
         const tileKey = `${globalX}-${globalY}`
         
         const tileElement = document.createElement('div')
-        tileElement.className = 'world-tile placeholder'
-        tileElement.style.position = 'absolute'
-        tileElement.style.left = `${globalX * tileSize}px`
-        tileElement.style.top = `${globalY * tileSize}px`
-        tileElement.style.width = `${tileSize}px`
-        tileElement.style.height = `${tileSize}px`
-        tileElement.style.backgroundColor = PLACEHOLDER_COLOR
+        tileElement.className = 'world-tile'
+        // No background color initially - invisible placeholder
         
         // Store tile data for interactions
         tileElement.dataset.tileX = globalX.toString()
@@ -231,45 +170,16 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
         
         container.appendChild(tileElement)
         tilesMapRef.current.set(tileKey, tileElement)
-        
-        tilesCreated++
-        batchCount++
-      }
-      
-      // Update progress
-      const percentage = Math.round((tilesCreated / totalTiles) * 100)
-      setTileCreationProgress({
-        isCreating: tilesCreated < totalTiles,
-        current: tilesCreated,
-        total: totalTiles,
-        percentage
-      })
-      
-      if (tilesCreated < totalTiles) {
-        // Continue with next batch on next frame
-        requestAnimationFrame(createBatch)
-      } else {
-        // Tile creation complete
-        tileCreationRef.current.isCreating = false
-        setTileCreationProgress({
-          isCreating: false,
-          current: totalTiles,
-          total: totalTiles,
-          percentage: 100
-        })
       }
     }
-    
-    // Start creating tiles
-    requestAnimationFrame(createBatch)
   }, [bounds, chunkSize, tileSize])
 
-  // Create placeholder tiles when both bounds and container are available
+  // Create grid when bounds are available
   useEffect(() => {
     if (bounds && containerRef.current) {
-      createPlaceholderTilesProgressively();
+      createStaticGrid();
     }
-  }, [createPlaceholderTilesProgressively]);
+  }, [createStaticGrid]);
 
   // Update tiles when chunks change
   useEffect(() => {
@@ -294,15 +204,15 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
         if (tileElement && tile.biome) {
           const color = getBiomeColor(tile.biome as BiomeKey, tile.elevation)
           
-          // Update tile appearance without layout changes
+          // Paint tile with biome color
           tileElement.style.backgroundColor = color
-          tileElement.classList.remove('placeholder')
+          tileElement.classList.add('painted')
           
           // Store tile data for tooltip
           tileElement.dataset.biome = tile.biome
           tileElement.dataset.elevation = tile.elevation.toString()
           
-          // Add event listeners for interaction
+          // Add event listeners for interaction with single tooltip
           const handleTileHover = (event: MouseEvent) => {
             const clientX = event.clientX
             const clientY = event.clientY
@@ -376,21 +286,8 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
   const clear = useCallback(() => {
     const container = containerRef.current
     if (container) {
-      // Cancel any ongoing tile creation
-      if (tileCreationRef.current.isCreating) {
-        tileCreationRef.current.cancelToken.cancelled = true
-      }
-      
       container.innerHTML = ''
       tilesMapRef.current.clear()
-      
-      // Reset creation progress
-      setTileCreationProgress({
-        isCreating: false,
-        current: 0,
-        total: 0,
-        percentage: 0
-      })
     }
   }, [])
 
@@ -408,7 +305,7 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
       {hasMapArea ? (
         <div 
           ref={containerRef}
-          className="dom-world-map simple-grid"
+          className="dom-world-map css-grid"
         />
       ) : (
         <div className="map-placeholder">
@@ -419,13 +316,7 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
         </div>
       )}
       
-      {tileCreationProgress.isCreating && (
-        <div className="progress-info tile-creation">
-          🏗️ Creating map tiles... {tileCreationProgress.current.toLocaleString()}/{tileCreationProgress.total.toLocaleString()} ({tileCreationProgress.percentage}%)
-        </div>
-      )}
-      
-      {isGenerating && !tileCreationProgress.isCreating && (
+      {isGenerating && (
         <div className="progress-info">
           🌍 Loading chunks... {chunks.size} loaded
         </div>

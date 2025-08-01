@@ -1,16 +1,3 @@
-export interface Tile {
-  type: 'land' | 'ocean';
-  x: number;
-  y: number;
-  elevation: number; // 0-1, where 0 is sea level
-  temperature: number; // 0-1, where 0 is coldest, 1 is hottest
-  moisture: number; // 0-1, where 0 is driest, 1 is wettest
-  biome: BiomeType; // Calculated biome based on elevation, temperature, moisture
-  elevationType: ElevationType; // Calculated elevation category
-  river: RiverType; // River segment type at this tile
-  lake: boolean; // Whether this tile contains a lake
-}
-
 // Import shared types for paginated generation
 import { 
   MapPageRequest, 
@@ -19,13 +6,19 @@ import {
   MapChunkResponse,
   CompactTile, 
   tileToCompact,
+  Tile,
   BiomeType,
   ElevationType,
   RiverType,
+  VegetationDensity,
   classifyBiome,
+  classifyVegetationDensity,
   getElevationType,
   CHUNK_SIZE
 } from '../shared/types.js';
+
+// Re-export Tile for backward compatibility
+export { Tile };
 
 /**
  * Simple Perlin noise implementation for terrain generation
@@ -996,6 +989,9 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
   // Determine if this tile has a lake
   const lake = isLake(x, y, seed);
   
+  // Calculate vegetation density based on biome and climate
+  const vegetationDensity = classifyVegetationDensity(biome, temperature, moisture, elevation);
+  
   return {
     type: tileType,
     x,
@@ -1006,7 +1002,8 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
     biome,
     elevationType,
     river,
-    lake
+    lake,
+    vegetationDensity
   };
 }
 

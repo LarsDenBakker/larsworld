@@ -182,6 +182,127 @@ function testTileTypes() {
 }
 
 /**
+ * Test that vegetationDensity property is generated correctly
+ */
+function testVegetationDensity() {
+  try {
+    // Test using chunks to verify vegetation density is present and valid
+    const chunk = generateChunk(0, 0, 88888);
+    const allowedVegetationTypes = new Set(['low', 'med', 'high']);
+    const foundVegetationTypes = new Set();
+    
+    for (let y = 0; y < CHUNK_SIZE; y++) {
+      for (let x = 0; x < CHUNK_SIZE; x++) {
+        const tile = chunk[y][x];
+        
+        // Verify vegetationDensity property exists
+        if (tile.vegetationDensity === undefined) {
+          return {
+            name: 'Vegetation Density',
+            passed: false,
+            message: `Tile at (${x}, ${y}) missing vegetationDensity property`
+          };
+        }
+        
+        // Verify vegetationDensity has valid value
+        if (!allowedVegetationTypes.has(tile.vegetationDensity)) {
+          return {
+            name: 'Vegetation Density',
+            passed: false,
+            message: `Invalid vegetation density: ${tile.vegetationDensity}. Must be one of: ${Array.from(allowedVegetationTypes).join(', ')}`
+          };
+        }
+        
+        foundVegetationTypes.add(tile.vegetationDensity);
+      }
+    }
+    
+    // Test multiple chunks to ensure we get variety in vegetation density
+    // Use a wider range of chunk positions to get different biomes/climates
+    const chunks = [
+      generateChunk(0, 0, 88888),     // Arctic region
+      generateChunk(10, 30, 88888),   // Temperate/warm region
+      generateChunk(15, 25, 88888),   // Different temperate region  
+      generateChunk(8, 35, 88888),    // Potentially drier region (may have savanna)
+      generateChunk(22, 29, 88888)    // Area that had savanna in our testing
+    ];
+    
+    const allFoundVegetationTypes = new Set();
+    let totalTiles = 0;
+    const vegetationCounts = { low: 0, med: 0, high: 0 };
+    
+    for (const chunk of chunks) {
+      for (let y = 0; y < CHUNK_SIZE; y++) {
+        for (let x = 0; x < CHUNK_SIZE; x++) {
+          const tile = chunk[y][x];
+          allFoundVegetationTypes.add(tile.vegetationDensity);
+          vegetationCounts[tile.vegetationDensity]++;
+          totalTiles++;
+          
+          // Test logical consistency: ocean tiles should typically have low vegetation
+          if (tile.type === 'ocean' && tile.vegetationDensity !== 'low') {
+            return {
+              name: 'Vegetation Density',
+              passed: false,
+              message: `Ocean tile has ${tile.vegetationDensity} vegetation density. Ocean tiles should have low vegetation.`
+            };
+          }
+        }
+      }
+    }
+    
+    // Should have at least 2 different vegetation density types across multiple chunks
+    if (allFoundVegetationTypes.size < 2) {
+      return {
+        name: 'Vegetation Density',
+        passed: false,
+        message: `Found only ${allFoundVegetationTypes.size} vegetation density type(s). Expected variety across chunks.`,
+        details: { foundVegetationTypes: Array.from(allFoundVegetationTypes) }
+      };
+    }
+    
+    // Test deterministic generation
+    const chunk1 = generateChunk(0, 0, 88888);
+    const chunk2 = generateChunk(0, 0, 88888);
+    
+    for (let y = 0; y < CHUNK_SIZE; y++) {
+      for (let x = 0; x < CHUNK_SIZE; x++) {
+        if (chunk1[y][x].vegetationDensity !== chunk2[y][x].vegetationDensity) {
+          return {
+            name: 'Vegetation Density',
+            passed: false,
+            message: `Vegetation density generation is not deterministic. Tile (${x},${y}) has different values: ${chunk1[y][x].vegetationDensity} vs ${chunk2[y][x].vegetationDensity}`
+          };
+        }
+      }
+    }
+    
+    const percentages = {
+      low: ((vegetationCounts.low / totalTiles) * 100).toFixed(1),
+      med: ((vegetationCounts.med / totalTiles) * 100).toFixed(1),
+      high: ((vegetationCounts.high / totalTiles) * 100).toFixed(1)
+    };
+    
+    return {
+      name: 'Vegetation Density',
+      passed: true,
+      message: `Vegetation density generated successfully. Found ${allFoundVegetationTypes.size} types: ${Array.from(allFoundVegetationTypes).join(', ')}`,
+      details: { 
+        foundVegetationTypes: Array.from(allFoundVegetationTypes),
+        percentages,
+        totalTiles
+      }
+    };
+  } catch (error) {
+    return {
+      name: 'Vegetation Density',
+      passed: false,
+      message: `Error: ${error.message}`
+    };
+  }
+}
+
+/**
  * Test deterministic generation with seeds
  */
 function testDeterministicGeneration() {
@@ -687,6 +808,7 @@ async function runAllTests() {
   
   const tests = [
     testTileTypes,
+    testVegetationDensity,
     testDeterministicGeneration,
     testRiverGeneration,
     testMapGenerationPerformance,

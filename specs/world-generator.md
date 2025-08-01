@@ -24,6 +24,27 @@
 # Tiles types
 - The possible tile types are land and ocean.
 
+# Vegetation Density
+- Each tile has a vegetation density property that indicates the density of plant life
+- Vegetation density has three possible values:
+  - **low**: Sparse vegetation (deserts, arctic regions, alpine areas, ocean with minimal marine plants)
+  - **med**: Moderate vegetation (grasslands, savannas)  
+  - **high**: Dense vegetation (forests, jungles, swamps, taiga)
+- Vegetation density is calculated based on:
+  - **Biome type**: Different biomes have characteristic vegetation patterns
+  - **Temperature**: Warmer areas generally support more vegetation
+  - **Moisture**: Higher moisture supports denser vegetation
+  - **Elevation**: Very high elevations reduce vegetation density even in forest biomes
+- Ocean biomes always have low vegetation density (representing marine algae and plants)
+- The algorithm ensures logical consistency between biome classification and vegetation density
+
+## Vegetation Density Algorithm
+- **Ocean biomes** (deep_ocean, shallow_ocean): Always **low**
+- **Sparse biomes** (desert, arctic, tundra, alpine): Always **low**
+- **Moderate biomes** (grassland, savanna): **med** by default, **high** if moisture > 0.7 and temperature > 0.4
+- **Dense biomes** (forest, taiga, tropical_forest, swamp): **high** by default, **med** if elevation > 0.8
+- **Fallback logic**: Based on climate conditions - too cold/dry gets **low**, warm and wet gets **high**, moderate conditions get **med**
+
 # Rivers
 - Rivers are generated on land tiles to create realistic waterways that follow natural terrain features
 - Each tile can contain a river segment with the following types:

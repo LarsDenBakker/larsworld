@@ -1,0 +1,24 @@
+{
+  "generated": "2025-08-01T17:26:55.054Z",
+  "tileSize": 6,
+  "biomes": [
+    "alpine",
+    "arctic",
+    "deep_ocean",
+    "desert",
+    "forest",
+    "grassland",
+    "savanna",
+    "shallow_ocean",
+    "swamp",
+    "taiga",
+    "tropical_forest",
+    "tundra"
+  ],
+  "elevationLevels": 11,
+  "totalFiles": 144,
+  "structure": {
+    "elevationSpecific": "{biome}-{0-10}.png",
+    "baseBiomes": "base/{biome}.png"
+  }
+}

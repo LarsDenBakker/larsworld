@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react'
 import ControlPanel from './ControlPanel'
-import BiomePngWorldMap from './BiomePngWorldMap'
+import StaticPngWorldMap from './StaticPngWorldMap'
+import CSSGradientWorldMap from './CSSGradientWorldMap'
 
 interface ChunkCoordinate {
   x: number
@@ -27,14 +28,15 @@ const WorldGenerator: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [minX, setMinX] = useState(0)
-  const [maxX, setMaxX] = useState(100)
+  const [maxX, setMaxX] = useState(2)
   const [minY, setMinY] = useState(0)
-  const [maxY, setMaxY] = useState(100)
+  const [maxY, setMaxY] = useState(2)
   const [worldName, setWorldName] = useState('')
   const [loadedChunks, setLoadedChunks] = useState(0)
   const [totalChunks, setTotalChunks] = useState(0)
   const [statusMessage, setStatusMessage] = useState('')
   const [chunks, setChunks] = useState(new Map<string, ChunkData>())
+  const [renderingMode, setRenderingMode] = useState<'static' | 'css-gradient'>('static')
 
   const worldMapRef = useRef<WorldMapRef>(null)
 
@@ -247,11 +249,49 @@ const WorldGenerator: React.FC = () => {
         onPauseGeneration={handlePauseGeneration}
       />
       
-      <BiomePngWorldMap
-        ref={worldMapRef}
-        chunks={chunks}
-        isGenerating={isGenerating}
-      />
+      {/* Rendering mode selector */}
+      <div style={{ margin: '10px 0', padding: '10px', background: '#f5f5f5', borderRadius: '8px' }}>
+        <label style={{ marginRight: '15px', fontWeight: 'bold' }}>
+          Rendering Mode:
+        </label>
+        <label style={{ marginRight: '15px' }}>
+          <input
+            type="radio"
+            name="renderingMode"
+            value="static"
+            checked={renderingMode === 'static'}
+            onChange={(e) => setRenderingMode(e.target.value as 'static' | 'css-gradient')}
+            style={{ marginRight: '5px' }}
+          />
+          Static PNGs (132 files)
+        </label>
+        <label>
+          <input
+            type="radio"
+            name="renderingMode"
+            value="css-gradient"
+            checked={renderingMode === 'css-gradient'}
+            onChange={(e) => setRenderingMode(e.target.value as 'static' | 'css-gradient')}
+            style={{ marginRight: '5px' }}
+          />
+          CSS Gradients (12 files)
+        </label>
+      </div>
+      
+      {/* Conditional rendering based on mode */}
+      {renderingMode === 'static' ? (
+        <StaticPngWorldMap
+          ref={worldMapRef}
+          chunks={chunks}
+          isGenerating={isGenerating}
+        />
+      ) : (
+        <CSSGradientWorldMap
+          ref={worldMapRef}
+          chunks={chunks}
+          isGenerating={isGenerating}
+        />
+      )}
     </>
   )
 }

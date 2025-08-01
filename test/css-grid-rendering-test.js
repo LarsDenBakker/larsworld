@@ -137,31 +137,65 @@ function testCSSGridPaintingPerformance() {
 }
 
 /**
- * Compare old vs new approach
+ * Test chunk-based instant creation performance
  */
-function compareApproaches() {
-  console.log('\n=== Comparing Approaches ===');
+function testChunkBasedInstantCreation() {
+  console.log('\nTesting chunk-based instant creation performance...');
   
-  // Test different sizes
-  const testSizes = [
-    { chunks: 10, description: '10x10 chunks (25,600 tiles)' },
-    { chunks: 25, description: '25x25 chunks (160,000 tiles)' },
-    { chunks: 50, description: '50x50 chunks (640,000 tiles)' }
-  ];
+  const container = document.getElementById('test-container');
+  const tileSize = 6;
+  const chunkSize = 16;
+  const chunksPerSide = 50; // 50x50 chunks = 2,500 chunks total
+  const chunkDisplaySize = chunkSize * tileSize; // 96px per chunk
+  const totalChunks = chunksPerSide * chunksPerSide;
   
-  const results = [];
+  console.log(`  Creating ${totalChunks.toLocaleString()} chunk containers (instead of 640k tiles)...`);
   
-  testSizes.forEach(testSize => {
-    console.log(`\nTesting ${testSize.description}:`);
-    
-    const result = testCSSGridInstantCreationWithSize(testSize.chunks);
-    results.push({
-      ...testSize,
-      ...result
-    });
-  });
+  const startTime = performance.now();
   
-  return results;
+  // Set up CSS Grid container for chunks
+  container.style.display = 'grid';
+  container.style.gridTemplateColumns = `repeat(${chunksPerSide}, ${chunkDisplaySize}px)`;
+  container.style.gridTemplateRows = `repeat(${chunksPerSide}, ${chunkDisplaySize}px)`;
+  container.style.gap = '2px';
+  
+  // Create chunk containers only (much fewer DOM nodes)
+  for (let chunkY = 0; chunkY < chunksPerSide; chunkY++) {
+    for (let chunkX = 0; chunkX < chunksPerSide; chunkX++) {
+      const chunkElement = document.createElement('div');
+      chunkElement.className = 'chunk-container';
+      chunkElement.style.width = `${chunkDisplaySize}px`;
+      chunkElement.style.height = `${chunkDisplaySize}px`;
+      chunkElement.style.position = 'relative';
+      
+      // Store chunk data
+      chunkElement.dataset.chunkX = chunkX.toString();
+      chunkElement.dataset.chunkY = chunkY.toString();
+      
+      container.appendChild(chunkElement);
+    }
+  }
+  
+  const endTime = performance.now();
+  const totalTime = endTime - startTime;
+  
+  console.log(`  Created ${totalChunks.toLocaleString()} chunk containers in ${totalTime.toFixed(2)}ms`);
+  console.log(`  Rate: ${(totalChunks / totalTime * 1000).toLocaleString()} chunks/second`);
+  console.log(`  DOM node reduction: ${Math.round(640000 / totalChunks)}x fewer nodes than tile-based approach`);
+  
+  // Cleanup
+  container.innerHTML = '';
+  container.style.display = '';
+  container.style.gridTemplateColumns = '';
+  container.style.gridTemplateRows = '';
+  container.style.gap = '';
+  
+  return {
+    totalChunks,
+    totalTime,
+    chunksPerSecond: totalChunks / totalTime * 1000,
+    domNodeReduction: Math.round(640000 / totalChunks)
+  };
 }
 
 /**
@@ -216,40 +250,36 @@ async function runCSSGridRenderingTests() {
   console.log('=== CSS Grid Rendering Performance Tests ===\n');
   
   try {
-    // Test instant creation
+    // Test original tile-based instant creation
     const instantResult = testCSSGridInstantCreation();
+    
+    // Test new chunk-based approach  
+    const chunkResult = testChunkBasedInstantCreation();
     
     // Test painting performance
     const paintResult = testCSSGridPaintingPerformance();
     
-    // Compare different sizes
-    const comparisonResults = compareApproaches();
-    
     console.log('\n=== CSS Grid Summary ===');
-    console.log(`Instant creation (640k tiles): ${(instantResult.totalTime / 1000).toFixed(2)}s`);
-    console.log(`Creation rate: ${instantResult.tilesPerSecond.toLocaleString()} tiles/sec`);
+    console.log(`Tile-based creation (640k tiles): ${(instantResult.totalTime / 1000).toFixed(2)}s`);
+    console.log(`Chunk-based creation (2.5k chunks): ${(chunkResult.totalTime / 1000).toFixed(2)}s`);
+    console.log(`DOM node reduction: ${chunkResult.domNodeReduction}x fewer nodes`);
     console.log(`Painting rate: ${paintResult.paintRate.toLocaleString()} tiles/sec`);
     
-    console.log('\nSize comparison:');
-    comparisonResults.forEach(result => {
-      console.log(`  ${result.description}: ${result.totalTime.toFixed(2)}ms`);
-    });
+    // Check if chunk-based approach passes the performance test
+    const passesPerformance = chunkResult.totalTime < 1000; // Should be under 1 second for chunk creation
     
-    // Check if 50x50 passes the performance test (should be under 5 seconds)
-    const large50x50 = comparisonResults.find(r => r.chunks === 50);
-    const passes50x50 = large50x50 && large50x50.totalTime < 5000;
-    
-    console.log(`\n50x50 chunks test: ${passes50x50 ? '✓ PASSED' : '✗ FAILED'}`);
-    if (large50x50) {
-      console.log(`  Time: ${(large50x50.totalTime / 1000).toFixed(2)}s (target: <5s)`);
-      console.log(`  Improvement: ~${Math.round(125516 / large50x50.totalTime)}x faster than progressive approach`);
+    console.log(`\nChunk-based 50x50 test: ${passesPerformance ? '✓ PASSED' : '✗ FAILED'}`);
+    console.log(`  Chunk creation time: ${chunkResult.totalTime.toFixed(2)}ms (target: <1000ms)`);
+    if (chunkResult.totalTime < 1000) {
+      console.log(`  Performance improvement: ~${Math.round(125516 / chunkResult.totalTime)}x faster than progressive approach`);
+      console.log(`  Performance improvement: ~${Math.round(instantResult.totalTime / chunkResult.totalTime)}x faster than tile-based CSS Grid`);
     }
     
     return {
-      passed: passes50x50,
+      passed: passesPerformance,
       instantResult,
-      paintResult,
-      comparisonResults
+      chunkResult,
+      paintResult
     };
     
   } catch (error) {

@@ -17,13 +17,22 @@
   position: relative;
 }
 
-/* CSS Grid based rendering for optimal performance */
-.dom-world-map.css-grid {
+/* CSS Grid based rendering for optimal performance with chunk containers */
+.dom-world-map.chunk-grid {
   /* Grid properties are set dynamically in JavaScript */
 }
 
+.chunk-container {
+  /* Chunk container for 16x16 tiles */
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
+  
+  /* Optimize chunks */
+  contain: layout style paint;
+}
+
 .world-tile {
-  /* No explicit size - CSS Grid handles sizing */
+  /* Individual tiles within chunks */
   cursor: pointer;
   
   /* Optimize individual tiles */
@@ -31,8 +40,6 @@
   
   /* Simple transition without complex animations */
   transition: transform 0.15s ease-in-out;
-  
-  /* No background initially - invisible placeholder */
 }
 
 /* Painted tiles have biome colors */
@@ -41,7 +48,7 @@
 }
 
 .world-tile:hover {
-  transform: scale(1.1);
+  transform: scale(1.2);
   z-index: 10;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }

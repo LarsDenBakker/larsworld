@@ -508,7 +508,7 @@ function testChunkBasedGeneration() {
  */
 function testChunkOceanCoverage() {
   try {
-    const seed = 77777;
+    const seed = 42424;
     
     // Test multiple different areas to get a better representation
     const testAreas = [

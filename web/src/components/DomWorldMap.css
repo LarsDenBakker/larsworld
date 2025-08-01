@@ -87,6 +87,13 @@
   transition: all 0.3s ease;
 }
 
+/* Different styling for tile creation progress */
+.progress-info.tile-creation {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #1e40af;
+}
+
 /* Rendering progress animation */
 .progress-info::before {
   content: '';

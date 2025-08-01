@@ -56,9 +56,28 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
   const containerRef = useRef<HTMLDivElement>(null)
   const boundsRef = useRef<{ minX: number, maxX: number, minY: number, maxY: number } | null>(null)
   const tilesMapRef = useRef<Map<string, HTMLDivElement>>(new Map())
+  const tileCreationRef = useRef<{ 
+    isCreating: boolean
+    cancelToken: { cancelled: boolean }
+    currentIndex: number
+    totalTiles: number
+  }>({ isCreating: false, cancelToken: { cancelled: false }, currentIndex: 0, totalTiles: 0 })
   
   // State for bounds to trigger re-render
   const [bounds, setBounds] = useState<{ minX: number, maxX: number, minY: number, maxY: number } | null>(null)
+  
+  // State for tile creation progress
+  const [tileCreationProgress, setTileCreationProgress] = useState<{
+    isCreating: boolean
+    current: number
+    total: number
+    percentage: number
+  }>({
+    isCreating: false,
+    current: 0,
+    total: 0,
+    percentage: 0
+  })
   
   // State for tooltip only
   const [tooltip, setTooltip] = useState<{
@@ -117,66 +136,140 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
     return `rgb(${r}, ${g}, ${b})`
   }
 
-  // Create placeholder tiles when bounds are set
-  const createPlaceholderTiles = useCallback(() => {
+  // Create placeholder tiles progressively when bounds are set
+  const createPlaceholderTilesProgressively = useCallback(async () => {
     if (!bounds || !containerRef.current) return
 
     const { minX, maxX, minY, maxY } = bounds
     const container = containerRef.current
     
-    // Clear existing tiles
+    // Clear existing tiles and cancel any ongoing creation
     container.innerHTML = ''
     tilesMapRef.current.clear()
+    
+    // Cancel previous tile creation if running
+    if (tileCreationRef.current.isCreating) {
+      tileCreationRef.current.cancelToken.cancelled = true
+    }
 
     // Set container size upfront - this is fixed and won't change
     const widthChunks = maxX - minX + 1
     const heightChunks = maxY - minY + 1
     const totalWidth = widthChunks * chunkSize * tileSize
     const totalHeight = heightChunks * chunkSize * tileSize
+    const totalTiles = widthChunks * heightChunks * chunkSize * chunkSize
     
     container.style.width = `${totalWidth}px`
     container.style.height = `${totalHeight}px`
 
-    // Create all placeholder tiles upfront
-    for (let chunkY = minY; chunkY <= maxY; chunkY++) {
-      for (let chunkX = minX; chunkX <= maxX; chunkX++) {
-        for (let localY = 0; localY < chunkSize; localY++) {
-          for (let localX = 0; localX < chunkSize; localX++) {
-            const globalX = (chunkX - minX) * chunkSize + localX
-            const globalY = (chunkY - minY) * chunkSize + localY
-            const tileKey = `${globalX}-${globalY}`
-            
-            const tileElement = document.createElement('div')
-            tileElement.className = 'world-tile placeholder'
-            tileElement.style.position = 'absolute'
-            tileElement.style.left = `${globalX * tileSize}px`
-            tileElement.style.top = `${globalY * tileSize}px`
-            tileElement.style.width = `${tileSize}px`
-            tileElement.style.height = `${tileSize}px`
-            tileElement.style.backgroundColor = PLACEHOLDER_COLOR
-            
-            // Store tile data for interactions
-            tileElement.dataset.tileX = globalX.toString()
-            tileElement.dataset.tileY = globalY.toString()
-            tileElement.dataset.chunkX = chunkX.toString()
-            tileElement.dataset.chunkY = chunkY.toString()
-            tileElement.dataset.localX = localX.toString()
-            tileElement.dataset.localY = localY.toString()
-            
-            container.appendChild(tileElement)
-            tilesMapRef.current.set(tileKey, tileElement)
-          }
-        }
+    // Set up new creation session
+    const cancelToken = { cancelled: false }
+    tileCreationRef.current = {
+      isCreating: true,
+      cancelToken,
+      currentIndex: 0,
+      totalTiles
+    }
+
+    setTileCreationProgress({
+      isCreating: true,
+      current: 0,
+      total: totalTiles,
+      percentage: 0
+    })
+
+    // Create tiles progressively in batches
+    const batchSize = 100 // Create 100 tiles per frame for smooth rendering
+    let tilesCreated = 0
+    
+    const createBatch = () => {
+      if (cancelToken.cancelled) {
+        // Creation was cancelled
+        setTileCreationProgress({
+          isCreating: false,
+          current: 0,
+          total: 0,
+          percentage: 0
+        })
+        return
+      }
+
+      const batchStart = performance.now()
+      let batchCount = 0
+      
+      // Create tiles up to batch size or until done
+      while (batchCount < batchSize && tilesCreated < totalTiles) {
+        // Calculate tile coordinates
+        const tilesPerRow = widthChunks * chunkSize
+        const globalY = Math.floor(tilesCreated / tilesPerRow)
+        const globalX = tilesCreated % tilesPerRow
+        
+        // Calculate chunk and local coordinates
+        const chunkX = minX + Math.floor(globalX / chunkSize)
+        const chunkY = minY + Math.floor(globalY / chunkSize)
+        const localX = globalX % chunkSize
+        const localY = globalY % chunkSize
+        
+        const tileKey = `${globalX}-${globalY}`
+        
+        const tileElement = document.createElement('div')
+        tileElement.className = 'world-tile placeholder'
+        tileElement.style.position = 'absolute'
+        tileElement.style.left = `${globalX * tileSize}px`
+        tileElement.style.top = `${globalY * tileSize}px`
+        tileElement.style.width = `${tileSize}px`
+        tileElement.style.height = `${tileSize}px`
+        tileElement.style.backgroundColor = PLACEHOLDER_COLOR
+        
+        // Store tile data for interactions
+        tileElement.dataset.tileX = globalX.toString()
+        tileElement.dataset.tileY = globalY.toString()
+        tileElement.dataset.chunkX = chunkX.toString()
+        tileElement.dataset.chunkY = chunkY.toString()
+        tileElement.dataset.localX = localX.toString()
+        tileElement.dataset.localY = localY.toString()
+        
+        container.appendChild(tileElement)
+        tilesMapRef.current.set(tileKey, tileElement)
+        
+        tilesCreated++
+        batchCount++
+      }
+      
+      // Update progress
+      const percentage = Math.round((tilesCreated / totalTiles) * 100)
+      setTileCreationProgress({
+        isCreating: tilesCreated < totalTiles,
+        current: tilesCreated,
+        total: totalTiles,
+        percentage
+      })
+      
+      if (tilesCreated < totalTiles) {
+        // Continue with next batch on next frame
+        requestAnimationFrame(createBatch)
+      } else {
+        // Tile creation complete
+        tileCreationRef.current.isCreating = false
+        setTileCreationProgress({
+          isCreating: false,
+          current: totalTiles,
+          total: totalTiles,
+          percentage: 100
+        })
       }
     }
+    
+    // Start creating tiles
+    requestAnimationFrame(createBatch)
   }, [bounds, chunkSize, tileSize])
 
   // Create placeholder tiles when both bounds and container are available
   useEffect(() => {
     if (bounds && containerRef.current) {
-      createPlaceholderTiles();
+      createPlaceholderTilesProgressively();
     }
-  }, [createPlaceholderTiles]);
+  }, [createPlaceholderTilesProgressively]);
 
   // Update tiles when chunks change
   useEffect(() => {
@@ -283,8 +376,21 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
   const clear = useCallback(() => {
     const container = containerRef.current
     if (container) {
+      // Cancel any ongoing tile creation
+      if (tileCreationRef.current.isCreating) {
+        tileCreationRef.current.cancelToken.cancelled = true
+      }
+      
       container.innerHTML = ''
       tilesMapRef.current.clear()
+      
+      // Reset creation progress
+      setTileCreationProgress({
+        isCreating: false,
+        current: 0,
+        total: 0,
+        percentage: 0
+      })
     }
   }, [])
 
@@ -313,9 +419,15 @@ const DomWorldMap = forwardRef<DomWorldMapRef, DomWorldMapProps>(({
         </div>
       )}
       
-      {isGenerating && (
+      {tileCreationProgress.isCreating && (
+        <div className="progress-info tile-creation">
+          🏗️ Creating map tiles... {tileCreationProgress.current.toLocaleString()}/{tileCreationProgress.total.toLocaleString()} ({tileCreationProgress.percentage}%)
+        </div>
+      )}
+      
+      {isGenerating && !tileCreationProgress.isCreating && (
         <div className="progress-info">
-          Loading chunks... {chunks.size} loaded
+          🌍 Loading chunks... {chunks.size} loaded
         </div>
       )}
       

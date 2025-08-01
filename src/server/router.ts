@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { generateMapChunk, validateMapChunkRequest } from '../map-generator/index.js';
-import { MapChunkRequest, ApiError } from '../shared/types.js';
+import { MapChunkRequest, MapBatchChunkRequest, MapBatchChunkResponse, ApiError } from '../shared/types.js';
 
 const router = Router();
 
@@ -135,6 +135,88 @@ router.post('/chunk', (req, res) => {
     console.error('[Chunk Map POST] Error:', error);
     const apiError: ApiError = {
       error: 'Chunk generation failed',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    };
+    res.status(400).json(apiError);
+  }
+});
+
+// Batch chunk endpoint for efficient chunk fetching
+router.post('/chunks', (req, res) => {
+  try {
+    const { chunks, seed = 'default' } = req.body as MapBatchChunkRequest;
+
+    // Validate input
+    if (!Array.isArray(chunks) || chunks.length === 0) {
+      const error: ApiError = {
+        error: 'Invalid chunks array',
+        details: 'chunks must be a non-empty array of {chunkX, chunkY} objects'
+      };
+      return res.status(400).json(error);
+    }
+
+    // Validate each chunk coordinate
+    for (const chunk of chunks) {
+      if (typeof chunk.chunkX !== 'number' || typeof chunk.chunkY !== 'number') {
+        const error: ApiError = {
+          error: 'Invalid chunk coordinates',
+          details: 'All chunks must have valid chunkX and chunkY numbers'
+        };
+        return res.status(400).json(error);
+      }
+    }
+
+    console.log(`[Batch Chunks] Request: ${chunks.length} chunks, seed=${seed}`);
+
+    const startTime = Date.now();
+    let totalSizeBytes = 0;
+    const generatedChunks = [];
+
+    // Generate each chunk
+    for (const { chunkX, chunkY } of chunks) {
+      const request: MapChunkRequest = { chunkX, chunkY, seed };
+      
+      try {
+        validateMapChunkRequest(request);
+        const chunkResponse = generateMapChunk(request);
+        generatedChunks.push(chunkResponse);
+        totalSizeBytes += chunkResponse.sizeBytes;
+
+        // Check if we're approaching the 6MB limit
+        if (totalSizeBytes > 6 * 1024 * 1024) {
+          console.warn(`[Batch Chunks] Payload size ${Math.round(totalSizeBytes / 1024 / 1024 * 100) / 100}MB exceeds 6MB limit`);
+          break;
+        }
+      } catch (chunkError) {
+        console.error(`[Batch Chunks] Failed to generate chunk (${chunkX}, ${chunkY}):`, chunkError);
+        // Continue with other chunks rather than failing the entire batch
+      }
+    }
+
+    const duration = Date.now() - startTime;
+
+    if (totalSizeBytes > 6 * 1024 * 1024) {
+      const error: ApiError = {
+        error: 'Batch payload too large',
+        details: `Generated ${Math.round(totalSizeBytes / 1024 / 1024 * 100) / 100}MB, exceeds 6MB limit. Consider requesting fewer chunks.`
+      };
+      return res.status(413).json(error);
+    }
+
+    const response: MapBatchChunkResponse = {
+      chunks: generatedChunks,
+      totalSizeBytes,
+      seed
+    };
+
+    console.log(`[Batch Chunks] Generated ${generatedChunks.length} chunks in ${duration}ms, total size: ${Math.round(totalSizeBytes / 1024)}KB`);
+
+    res.json(response);
+
+  } catch (error) {
+    console.error('[Batch Chunks] Error:', error);
+    const apiError: ApiError = {
+      error: 'Batch chunk generation failed',
       details: error instanceof Error ? error.message : 'Unknown error'
     };
     res.status(400).json(apiError);

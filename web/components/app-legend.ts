@@ -8,6 +8,9 @@ export class AppLegend extends LitElement {
     isCollapsed: { type: Boolean }
   };
 
+  // TypeScript property declarations
+  declare isCollapsed: boolean;
+
   static styles = css`
     :host {
       position: fixed;

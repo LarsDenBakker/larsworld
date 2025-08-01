@@ -36,8 +36,22 @@ export class WorldGenerator extends LitElement {
     worldName: { type: String },
     loadedChunks: { type: Number },
     totalChunks: { type: Number },
-    statusMessage: { type: String }
+    statusMessage: { type: String },
+    chunks: { type: Object }
   };
+
+  // TypeScript property declarations
+  declare isGenerating: boolean;
+  declare isPaused: boolean;
+  declare minX: number;
+  declare maxX: number;
+  declare minY: number;
+  declare maxY: number;
+  declare worldName: string;
+  declare loadedChunks: number;
+  declare totalChunks: number;
+  declare statusMessage: string;
+  declare chunks: Map<string, ChunkData>;
 
   worldMap: any;
 
@@ -45,26 +59,35 @@ export class WorldGenerator extends LitElement {
   private activeRequests = 0;
   private maxParallelRequests = 5;
   private loadingQueue: ChunkCoordinate[] = [];
-  private chunks = new Map<string, ChunkData>();
   private seed = '';
+  private batchSize = 200; // Conservative batch size to stay under 6MB
+  private canvasSizeSet = false; // Flag to ensure setMapSize is called once
 
   constructor() {
     super();
     this.isGenerating = false;
     this.isPaused = false;
     this.minX = 0;
-    this.maxX = 2;
+    this.maxX = 100;
     this.minY = 0;
-    this.maxY = 2;
+    this.maxY = 100;
     this.worldName = '';
     this.loadedChunks = 0;
     this.totalChunks = 0;
     this.statusMessage = '';
+    this.chunks = new Map<string, ChunkData>();
   }
 
   firstUpdated() {
     // Get reference to the world map component
     this.worldMap = this.shadowRoot!.querySelector('world-map');
+  }
+
+  private _getWorldMap() {
+    if (!this.worldMap) {
+      this.worldMap = this.shadowRoot?.querySelector('world-map');
+    }
+    return this.worldMap;
   }
 
   static styles = css`
@@ -98,6 +121,9 @@ export class WorldGenerator extends LitElement {
     this.isPaused = false;
     this.loadedChunks = 0;
     this.chunks.clear();
+    // Trigger reactive update by reassigning the Map
+    this.chunks = new Map(this.chunks);
+    this.canvasSizeSet = false; // Reset canvas size flag
     
     // Generate or use provided seed
     this.seed = this.worldName || this._generateRandomSeed();
@@ -105,10 +131,6 @@ export class WorldGenerator extends LitElement {
     // Calculate total chunks and set up queue
     this.totalChunks = (this.maxX - this.minX + 1) * (this.maxY - this.minY + 1);
     this.statusMessage = `Starting generation of ${this.totalChunks} chunks...`;
-    
-    // Set up the world map canvas
-    this.worldMap?.setMapSize(this.minX, this.maxX, this.minY, this.maxY);
-    this.worldMap?.clear();
     
     // Generate diagonal loading queue
     this.loadingQueue = this._generateDiagonalQueue();
@@ -159,9 +181,10 @@ export class WorldGenerator extends LitElement {
            this.loadingQueue.length > 0 && 
            this.activeRequests < this.maxParallelRequests) {
       
-      const chunk = this.loadingQueue.shift();
-      if (chunk) {
-        this._loadChunk(chunk.x, chunk.y);
+      // Create batch of chunks to load (up to batchSize)
+      const batchChunks = this.loadingQueue.splice(0, this.batchSize);
+      if (batchChunks.length > 0) {
+        this._loadChunkBatch(batchChunks);
       }
     }
 
@@ -172,18 +195,17 @@ export class WorldGenerator extends LitElement {
     }
   }
 
-  private async _loadChunk(chunkX: number, chunkY: number) {
+  private async _loadChunkBatch(batchChunks: ChunkCoordinate[]) {
     this.activeRequests++;
 
     try {
-      const response = await fetch('/api/chunk', {
+      const response = await fetch('/api/chunks', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          chunkX,
-          chunkY,
+          chunks: batchChunks.map(c => ({ chunkX: c.x, chunkY: c.y })),
           seed: this.seed
         })
       });
@@ -192,18 +214,52 @@ export class WorldGenerator extends LitElement {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const chunkData: ChunkData = await response.json();
+      const batchData = await response.json();
       
-      // Add chunk to map and render
-      this.chunks.set(`${chunkX},${chunkY}`, chunkData);
-      this.worldMap?.addChunk(chunkX, chunkY, chunkData, this.minX, this.minY);
+      // Process each chunk in the batch
+      for (const chunkResponse of batchData.chunks) {
+        const { chunkX, chunkY, tiles } = chunkResponse;
+        
+        // Set canvas size before processing first chunk
+        if (!this.canvasSizeSet) {
+          const worldMap = this._getWorldMap();
+          if (worldMap) {
+            worldMap.setMapSize(this.minX, this.maxX, this.minY, this.maxY);
+            worldMap.clear();
+            this.canvasSizeSet = true;
+          }
+        }
+        
+        // Convert response format to the expected ChunkData format
+        const chunkData: ChunkData = {};
+        for (let y = 0; y < 16; y++) {
+          for (let x = 0; x < 16; x++) {
+            const tileIndex = y * 16 + x;
+            const tile = tiles[y][x];
+            
+            // Convert compact tile format to expected format
+            chunkData[tileIndex] = {
+              biome: this._getBiomeFromCompactTile(tile),
+              elevation: tile.e / 255
+            };
+          }
+        }
+        
+        // Add chunk to map and render with fade animation
+        this.chunks.set(`${chunkX},${chunkY}`, chunkData);
+        // Trigger reactive update by reassigning the Map
+        this.chunks = new Map(this.chunks);
+        const worldMap = this._getWorldMap();
+        worldMap?.addChunk(chunkX, chunkY, chunkData, this.minX, this.minY);
+        
+        this.loadedChunks++;
+      }
       
-      this.loadedChunks++;
-      this.statusMessage = `Loaded ${this.loadedChunks}/${this.totalChunks} chunks`;
+      this.statusMessage = `Loaded ${this.loadedChunks}/${this.totalChunks} chunks (batch of ${batchData.chunks.length})`;
 
     } catch (error) {
-      console.error(`Failed to load chunk (${chunkX}, ${chunkY}):`, error);
-      this.statusMessage = `Error loading chunk (${chunkX}, ${chunkY}): ${(error as Error).message}`;
+      console.error(`Failed to load chunk batch:`, error);
+      this.statusMessage = `Error loading chunk batch: ${(error as Error).message}`;
     } finally {
       this.activeRequests--;
       
@@ -212,6 +268,15 @@ export class WorldGenerator extends LitElement {
         this._processQueue();
       }
     }
+  }
+
+  private _getBiomeFromCompactTile(tile: any): string {
+    // Map biome indices to biome names based on BIOME_TYPES from shared/types.ts
+    const biomes = [
+      'deep_ocean', 'shallow_ocean', 'desert', 'tundra', 'arctic', 'swamp',
+      'grassland', 'forest', 'taiga', 'savanna', 'tropical_forest', 'alpine'
+    ];
+    return biomes[tile.b] || 'grassland';
   }
 
   render() {

@@ -88,9 +88,9 @@ describe('LarsWorld Components', () => {
       const el = await fixture(html`<control-panel></control-panel>`);
       
       expect(el.minX).to.equal(0);
-      expect(el.maxX).to.equal(2);
+      expect(el.maxX).to.equal(100);
       expect(el.minY).to.equal(0);
-      expect(el.maxY).to.equal(2);
+      expect(el.maxY).to.equal(100);
     });
 
     it('should emit coordinate-change event when inputs change', async () => {
@@ -122,30 +122,29 @@ describe('LarsWorld Components', () => {
     it('should calculate estimated size correctly', async () => {
       const el = await fixture(html`<control-panel></control-panel>`);
       
-      // Default 3x3 grid should show estimated size
+      // Default 101x101 grid should show estimated size
       const infoSection = el.shadowRoot.querySelector('.info-section');
-      expect(infoSection.textContent).to.include('9 chunks');
-      expect(infoSection.textContent).to.include('MB');
+      expect(infoSection.textContent).to.include('10201 chunks');
+      expect(infoSection.textContent).to.include('tiles');
     });
 
-    it('should validate coordinates and disable start for large areas', async () => {
+    it('should validate coordinates and disable start for invalid ranges', async () => {
       const el = await fixture(html`<control-panel></control-panel>`);
       
-      // Initially should be able to start with default small area
+      // Initially should be able to start with valid default area
       expect(el.canStart).to.be.true;
       
-      // Set large area that would exceed 6MB limit
-      // 25x25 = 625 chunks should be over 6MB (625 * 16 * 16 * 100 bytes = ~16MB)
-      el.minX = 0;
-      el.maxX = 24;
+      // Set invalid range where max < min
+      el.minX = 5;
+      el.maxX = 2; // Invalid: max < min
       el.minY = 0;
-      el.maxY = 24;
+      el.maxY = 2;
       
       // Force update and wait for completion
       el.requestUpdate();
       await el.updateComplete;
       
-      // Should now be disabled
+      // Should now be disabled due to invalid coordinate range
       expect(el.canStart).to.be.false;
       
       // Check that start button is disabled

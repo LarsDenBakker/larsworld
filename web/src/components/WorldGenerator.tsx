@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react'
 import ControlPanel from './ControlPanel'
-import PngWorldMap from './PngWorldMap'
+import BiomePngWorldMap from './BiomePngWorldMap'
 
 interface ChunkCoordinate {
   x: number
@@ -40,10 +40,10 @@ const WorldGenerator: React.FC = () => {
 
   // Private generation state
   const activeRequestsRef = useRef(0)
-  const maxParallelRequests = 5
+  const maxParallelRequests = 1  // Changed to 1 for debugging purposes
   const loadingQueueRef = useRef<ChunkCoordinate[]>([])
   const seedRef = useRef('')
-  const batchSize = 200
+  const batchSize = 1  // Changed to 1 for debugging individual chunks
   const canvasSizeSetRef = useRef(false)
 
   const getWorldMap = useCallback(() => {
@@ -78,24 +78,16 @@ const WorldGenerator: React.FC = () => {
     return `${Date.now()}-${Math.floor(Math.random() * 10000)}`
   }
 
-  const generateDiagonalQueue = useCallback((): ChunkCoordinate[] => {
+  const generateLeftToRightTopToBottomQueue = useCallback((): ChunkCoordinate[] => {
     const queue: ChunkCoordinate[] = []
-    const widthChunks = maxX - minX + 1
-    const heightChunks = maxY - minY + 1
-    const maxDiagonal = widthChunks + heightChunks - 2
-
-    for (let d = 0; d <= maxDiagonal; d++) {
-      for (let x = 0; x < widthChunks; x++) {
-        const y = d - x
-        if (y >= 0 && y < heightChunks) {
-          queue.push({
-            x: minX + x,
-            y: minY + y
-          })
-        }
+    
+    // Simple left-to-right, top-to-bottom order for debugging
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        queue.push({ x, y })
       }
     }
-
+    
     return queue
   }, [minX, maxX, minY, maxY])
 
@@ -112,25 +104,15 @@ const WorldGenerator: React.FC = () => {
     activeRequestsRef.current++
 
     try {
-      const response = await fetch('/api/chunks', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          chunks: batchChunks.map(c => ({ chunkX: c.x, chunkY: c.y })),
-          seed: seedRef.current
-        })
-      })
+      // Process one chunk at a time for debugging
+      for (const chunk of batchChunks) {
+        const response = await fetch(`/api/chunk?chunkX=${chunk.x}&chunkY=${chunk.y}&seed=${seedRef.current}`)
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
 
-      const batchData = await response.json()
-      
-      // Process each chunk in the batch
-      for (const chunkResponse of batchData.chunks) {
+        const chunkResponse = await response.json()
         const { chunkX, chunkY, tiles } = chunkResponse
         
         // Convert response format to the expected ChunkData format
@@ -148,7 +130,7 @@ const WorldGenerator: React.FC = () => {
           }
         }
         
-        // Add chunk to map and render with fade animation
+        // Add chunk to map and render
         setChunks(prevChunks => {
           const newChunks = new Map(prevChunks)
           newChunks.set(`${chunkX},${chunkY}`, chunkData)
@@ -157,19 +139,18 @@ const WorldGenerator: React.FC = () => {
         
         const worldMap = getWorldMap()
         worldMap?.addChunk(chunkX, chunkY, chunkData, minX, minY)
+        
+        // Update loaded chunks count after each chunk
+        setLoadedChunks(prev => {
+          const newCount = prev + 1
+          setStatusMessage(`Loaded ${newCount}/${totalChunks} chunks - chunk (${chunkX}, ${chunkY})`)
+          return newCount
+        })
       }
-      
-      // Update loaded chunks count after processing all chunks in batch
-      setLoadedChunks(prev => {
-        const newCount = prev + batchData.chunks.length
-        // Update status message with the new count
-        setStatusMessage(`Loaded ${newCount}/${totalChunks} chunks (batch of ${batchData.chunks.length})`)
-        return newCount
-      })
 
     } catch (error) {
-      console.error(`Failed to load chunk batch:`, error)
-      setStatusMessage(`Error loading chunk batch: ${(error as Error).message}`)
+      console.error(`Failed to load chunk:`, error)
+      setStatusMessage(`Error loading chunk: ${(error as Error).message}`)
     } finally {
       activeRequestsRef.current--
       
@@ -185,7 +166,7 @@ const WorldGenerator: React.FC = () => {
            loadingQueueRef.current.length > 0 && 
            activeRequestsRef.current < maxParallelRequests) {
       
-      // Create batch of chunks to load (up to batchSize)
+      // Create batch of chunks to load (now just 1 chunk per batch for debugging)
       const batchChunks = loadingQueueRef.current.splice(0, batchSize)
       if (batchChunks.length > 0) {
         loadChunkBatch(batchChunks)
@@ -230,8 +211,8 @@ const WorldGenerator: React.FC = () => {
     const worldMap = getWorldMap()
     worldMap?.setMapSize(minX, maxX, minY, maxY)
     
-    // Generate diagonal loading queue
-    loadingQueueRef.current = generateDiagonalQueue()
+    // Generate left-to-right, top-to-bottom loading queue for debugging
+    loadingQueueRef.current = generateLeftToRightTopToBottomQueue()
     activeRequestsRef.current = 0
     
     // Start processing
@@ -266,7 +247,7 @@ const WorldGenerator: React.FC = () => {
         onPauseGeneration={handlePauseGeneration}
       />
       
-      <PngWorldMap
+      <BiomePngWorldMap
         ref={worldMapRef}
         chunks={chunks}
         isGenerating={isGenerating}

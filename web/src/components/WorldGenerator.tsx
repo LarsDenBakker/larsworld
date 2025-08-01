@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react'
 import ControlPanel from './ControlPanel'
-import DomWorldMap from './DomWorldMap'
+import PngWorldMap from './PngWorldMap'
 
 interface ChunkCoordinate {
   x: number
@@ -266,7 +266,7 @@ const WorldGenerator: React.FC = () => {
         onPauseGeneration={handlePauseGeneration}
       />
       
-      <DomWorldMap
+      <PngWorldMap
         ref={worldMapRef}
         chunks={chunks}
         isGenerating={isGenerating}

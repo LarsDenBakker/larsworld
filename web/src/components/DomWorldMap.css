@@ -22,6 +22,37 @@
   /* Grid properties are set dynamically in JavaScript */
 }
 
+/* PNG-based chunk rendering optimizations */
+.dom-world-map.png-chunk-grid {
+  /* Grid properties are set dynamically in JavaScript */
+}
+
+.png-chunk-container {
+  /* PNG chunk image container */
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
+  overflow: hidden; /* Ensure crisp edges */
+  
+  /* Optimize image rendering */
+  contain: layout style paint;
+}
+
+.png-chunk-container img {
+  /* Crisp pixel art rendering for chunk images */
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+  image-rendering: -webkit-optimize-contrast;
+  
+  /* Smooth transitions */
+  transition: opacity 0.3s ease-in-out;
+}
+
+.png-chunk-container img:hover {
+  /* Subtle hover effect for PNG chunks */
+  filter: brightness(1.1);
+}
+
 .chunk-container {
   /* Chunk container for 16x16 tiles */
   border: 1px solid rgba(0, 0, 0, 0.1);

@@ -56,6 +56,16 @@ export const RIVER_TYPES = [
 export type RiverType = typeof RIVER_TYPES[number];
 export type RiverIndex = number; // 0-10 index into RIVER_TYPES array
 
+// Vegetation density types for ecosystem simulation
+export const VEGETATION_DENSITY_TYPES = [
+  'low',    // Sparse vegetation (deserts, arctic, alpine)
+  'med',    // Moderate vegetation (grasslands, savannas)
+  'high'    // Dense vegetation (forests, jungles, swamps)
+] as const;
+
+export type VegetationDensity = typeof VEGETATION_DENSITY_TYPES[number];
+export type VegetationDensityIndex = number; // 0-2 index into VEGETATION_DENSITY_TYPES array
+
 // Compact tile representation for API responses
 export interface CompactTile {
   /** Tile type index (0-1) */
@@ -72,6 +82,8 @@ export interface CompactTile {
   r: RiverIndex;
   /** Lake flag (0=no lake, 1=has lake) */
   l: number;
+  /** Vegetation density index (0-2) */
+  v: VegetationDensityIndex;
 }
 
 // Full tile representation used internally
@@ -86,6 +98,7 @@ export interface Tile {
   elevationType: ElevationType; // Calculated elevation category
   river: RiverType; // River segment type at this tile
   lake: boolean; // Whether this tile contains a lake
+  vegetationDensity: VegetationDensity; // Vegetation density based on biome and climate
 }
 
 // API request parameters for paginated map generation (legacy)
@@ -241,6 +254,61 @@ export function classifyBiome(elevation: number, temperature: number, moisture: 
 }
 
 /**
+ * Classify vegetation density based on biome, temperature, moisture, and elevation
+ * Ocean areas have low vegetation (algae/marine plants)
+ * Land vegetation varies by biome and climate conditions
+ */
+export function classifyVegetationDensity(
+  biome: BiomeType, 
+  temperature: number, 
+  moisture: number, 
+  elevation: number
+): VegetationDensity {
+  // Ocean biomes have minimal vegetation (marine plants, algae)
+  if (biome === 'deep_ocean' || biome === 'shallow_ocean') {
+    return 'low';
+  }
+  
+  // Land biomes - classify based on biome type with climate modifiers
+  switch (biome) {
+    case 'desert':
+    case 'arctic':
+    case 'tundra':
+    case 'alpine':
+      // Naturally sparse vegetation biomes
+      return 'low';
+      
+    case 'grassland':
+    case 'savanna':
+      // Moderate vegetation biomes - can be influenced by local conditions
+      if (moisture > 0.7 && temperature > 0.4) {
+        return 'high'; // Lush grasslands
+      }
+      return 'med';
+      
+    case 'forest':
+    case 'taiga':
+    case 'tropical_forest':
+    case 'swamp':
+      // Dense vegetation biomes - forests and wetlands
+      if (elevation > 0.8) {
+        return 'med'; // High elevation reduces density even in forests
+      }
+      return 'high';
+      
+    default:
+      // Fallback based on climate conditions
+      if (temperature < 0.2 || moisture < 0.1) {
+        return 'low'; // Too cold or dry
+      }
+      if (temperature > 0.6 && moisture > 0.6) {
+        return 'high'; // Warm and wet
+      }
+      return 'med'; // Moderate conditions
+  }
+}
+
+/**
  * Convert a full Tile to compact representation
  */
 export function tileToCompact(tile: Tile): CompactTile {
@@ -259,6 +327,11 @@ export function tileToCompact(tile: Tile): CompactTile {
     throw new Error(`Unknown river type: ${tile.river}`);
   }
   
+  const vegetationIndex = VEGETATION_DENSITY_TYPES.indexOf(tile.vegetationDensity);
+  if (vegetationIndex === -1) {
+    throw new Error(`Unknown vegetation density type: ${tile.vegetationDensity}`);
+  }
+  
   return {
     t: tileIndex,
     e: Math.round(tile.elevation * 255),
@@ -266,7 +339,8 @@ export function tileToCompact(tile: Tile): CompactTile {
     m: Math.round(tile.moisture * 255),
     b: biomeIndex,
     r: riverIndex,
-    l: tile.lake ? 1 : 0
+    l: tile.lake ? 1 : 0,
+    v: vegetationIndex
   };
 }
 
@@ -281,6 +355,7 @@ export function compactToTile(compact: CompactTile, x: number, y: number): Tile 
   const elevationType = getElevationType(elevation);
   const river = RIVER_TYPES[compact.r];
   const lake = compact.l === 1;
+  const vegetationDensity = VEGETATION_DENSITY_TYPES[compact.v];
   
   return {
     type: TILE_TYPES[compact.t],
@@ -292,7 +367,8 @@ export function compactToTile(compact: CompactTile, x: number, y: number): Tile 
     biome,
     elevationType,
     river,
-    lake
+    lake,
+    vegetationDensity
   };
 }
 

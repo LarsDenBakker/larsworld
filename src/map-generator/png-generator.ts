@@ -13,6 +13,7 @@ export interface PngGenerationOptions {
   showElevation?: boolean; // Whether to color by elevation
   showBiomes?: boolean; // Whether to show biome colors (default: true)
   showRivers?: boolean; // Whether to overlay rivers (default: true)
+  showLakes?: boolean; // Whether to overlay lakes (default: true)
 }
 
 /**
@@ -71,13 +72,36 @@ function applyRiverOverlay(baseColor: [number, number, number], riverType: River
 }
 
 /**
+ * Apply lake overlay to a base terrain color
+ * Lakes are rendered as darker blue water bodies
+ */
+function applyLakeOverlay(baseColor: [number, number, number], hasLake: boolean): [number, number, number] {
+  if (!hasLake) {
+    return baseColor;
+  }
+  
+  // Lake color - darker blue than rivers but still blue water
+  const lakeColor: [number, number, number] = [30, 120, 180];
+  
+  // Lakes are more opaque than rivers - they replace most of the terrain color
+  const lakeStrength = 0.85; // 85% lake, 15% terrain for slight texture
+  const terrainStrength = 1 - lakeStrength;
+  
+  return [
+    Math.floor(baseColor[0] * terrainStrength + lakeColor[0] * lakeStrength),
+    Math.floor(baseColor[1] * terrainStrength + lakeColor[1] * lakeStrength),
+    Math.floor(baseColor[2] * terrainStrength + lakeColor[2] * lakeStrength)
+  ];
+}
+
+/**
  * Generate a PNG image from a map of tiles
  */
 export async function generateMapPng(
   map: Tile[][],
   options: PngGenerationOptions
 ): Promise<Buffer> {
-  const { width, height, cellSize = 1, showElevation = false, showBiomes = true, showRivers = true } = options;
+  const { width, height, cellSize = 1, showElevation = false, showBiomes = true, showRivers = true, showLakes = true } = options;
   const imageWidth = width * cellSize;
   const imageHeight = height * cellSize;
   
@@ -93,7 +117,18 @@ export async function generateMapPng(
         // Use biome colors with elevation shading
         const baseColor = BIOME_COLORS[tile.biome as BiomeType] || [128, 128, 128]; // Fallback gray
         const shadedColor = applyElevationShading(baseColor, tile.elevation);
-        const finalColor = showRivers ? applyRiverOverlay(shadedColor, tile.river) : shadedColor;
+        let finalColor = shadedColor;
+        
+        // Apply lake overlay first (lakes are larger water bodies)
+        if (showLakes && tile.lake) {
+          finalColor = applyLakeOverlay(finalColor, tile.lake);
+        }
+        
+        // Apply river overlay second (rivers flow through and connect to lakes)
+        if (showRivers) {
+          finalColor = applyRiverOverlay(finalColor, tile.river);
+        }
+        
         color = [finalColor[0], finalColor[1], finalColor[2], 255];
       } else if (showElevation) {
         // Legacy elevation-based coloring
@@ -119,7 +154,18 @@ export async function generateMapPng(
             baseColor = [white, white, white];
           }
         }
-        const finalColor = showRivers ? applyRiverOverlay(baseColor, tile.river) : baseColor;
+        let finalColor = baseColor;
+        
+        // Apply lake overlay first (lakes are larger water bodies)
+        if (showLakes && tile.lake) {
+          finalColor = applyLakeOverlay(finalColor, tile.lake);
+        }
+        
+        // Apply river overlay second (rivers flow through and connect to lakes)
+        if (showRivers) {
+          finalColor = applyRiverOverlay(finalColor, tile.river);
+        }
+        
         color = [finalColor[0], finalColor[1], finalColor[2], 255];
       } else {
         // Simple tile type coloring (fallback)
@@ -129,7 +175,19 @@ export async function generateMapPng(
         } else {
           baseColor = [34, 139, 34]; // Forest green
         }
-        const finalColor = showRivers ? applyRiverOverlay(baseColor, tile.river) : baseColor;
+        
+        let finalColor = baseColor;
+        
+        // Apply lake overlay first (lakes are larger water bodies)
+        if (showLakes && tile.lake) {
+          finalColor = applyLakeOverlay(finalColor, tile.lake);
+        }
+        
+        // Apply river overlay second (rivers flow through and connect to lakes)
+        if (showRivers) {
+          finalColor = applyRiverOverlay(finalColor, tile.river);
+        }
+        
         color = [finalColor[0], finalColor[1], finalColor[2], 255];
       }
       

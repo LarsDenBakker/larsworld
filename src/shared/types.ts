@@ -70,6 +70,8 @@ export interface CompactTile {
   b: number;
   /** River type index (0-10) */
   r: RiverIndex;
+  /** Lake flag (0=no lake, 1=has lake) */
+  l: number;
 }
 
 // Full tile representation used internally
@@ -83,6 +85,7 @@ export interface Tile {
   biome: BiomeType; // Calculated biome based on elevation, temperature, moisture
   elevationType: ElevationType; // Calculated elevation category
   river: RiverType; // River segment type at this tile
+  lake: boolean; // Whether this tile contains a lake
 }
 
 // API request parameters for paginated map generation (legacy)
@@ -262,7 +265,8 @@ export function tileToCompact(tile: Tile): CompactTile {
     tmp: Math.round(tile.temperature * 255),
     m: Math.round(tile.moisture * 255),
     b: biomeIndex,
-    r: riverIndex
+    r: riverIndex,
+    l: tile.lake ? 1 : 0
   };
 }
 
@@ -276,6 +280,7 @@ export function compactToTile(compact: CompactTile, x: number, y: number): Tile 
   const biome = BIOME_TYPES[compact.b];
   const elevationType = getElevationType(elevation);
   const river = RIVER_TYPES[compact.r];
+  const lake = compact.l === 1;
   
   return {
     type: TILE_TYPES[compact.t],
@@ -286,7 +291,8 @@ export function compactToTile(compact: CompactTile, x: number, y: number): Tile 
     moisture,
     biome,
     elevationType,
-    river
+    river,
+    lake
   };
 }
 

@@ -6,6 +6,7 @@
 import { generateChunk } from '../dist/src/map-generator/index.js';
 import { CHUNK_SIZE } from '../dist/src/shared/types.js';
 import { saveMapPng } from '../dist/src/map-generator/png-generator.js';
+import sharp from 'sharp';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -25,6 +26,232 @@ const STABLE_SEEDS = [
   31415,   // Pi approximation
   27182    // e approximation
 ];
+
+/**
+ * Generate a river-only PNG for debugging river flow patterns
+ * Shows rivers as actual flowing lines, not full-tile coloring
+ * Also shows lakes as blue areas
+ */
+async function generateRiverOnlyPng(map, mapSize, filepath) {
+  const cellSize = 2; // 2x2 pixels per tile to match main images
+  const imageWidth = mapSize * cellSize;
+  const imageHeight = mapSize * cellSize;
+  
+  // Create RGBA buffer
+  const buffer = Buffer.alloc(imageWidth * imageHeight * 4);
+  
+  // First pass: Fill background colors
+  for (let y = 0; y < mapSize; y++) {
+    for (let x = 0; x < mapSize; x++) {
+      const tile = map[y][x];
+      let color = [255, 255, 255, 255]; // Default white (land)
+      
+      if (tile.type === 'ocean') {
+        // Light blue for ocean to show coastlines
+        color = [173, 216, 230, 255];
+      } else if (tile.lake) {
+        // Medium blue for lakes (darker than ocean, lighter than rivers)
+        color = [100, 150, 200, 255];
+      }
+      
+      // Fill pixels for this tile
+      for (let py = 0; py < cellSize; py++) {
+        for (let px = 0; px < cellSize; px++) {
+          const pixelX = x * cellSize + px;
+          const pixelY = y * cellSize + py;
+          const pixelIndex = (pixelY * imageWidth + pixelX) * 4;
+          
+          buffer[pixelIndex] = color[0];     // R
+          buffer[pixelIndex + 1] = color[1]; // G
+          buffer[pixelIndex + 2] = color[2]; // B
+          buffer[pixelIndex + 3] = color[3]; // A
+        }
+      }
+    }
+  }
+  
+  // Second pass: Draw river segments as lines
+  const riverColor = [0, 100, 255, 255]; // Bright blue for rivers
+  
+  for (let y = 0; y < mapSize; y++) {
+    for (let x = 0; x < mapSize; x++) {
+      const tile = map[y][x];
+      
+      if (tile.river !== 'none') {
+        drawRiverSegment(buffer, x, y, tile.river, cellSize, imageWidth, riverColor);
+      }
+    }
+  }
+  
+  // Create PNG using Sharp
+  const pngBuffer = await sharp(buffer, {
+    raw: {
+      width: imageWidth,
+      height: imageHeight,
+      channels: 4
+    }
+  }).png().toBuffer();
+  
+  // Save the image
+  const fs = await import('fs/promises');
+  await fs.writeFile(filepath, pngBuffer);
+}
+
+/**
+ * Draw a river segment based on its type
+ * Rivers appear as smooth lines flowing through tiles with less noisy edges
+ */
+function drawRiverSegment(buffer, tileX, tileY, riverType, cellSize, imageWidth, color) {
+  const startX = tileX * cellSize;
+  const startY = tileY * cellSize;
+  
+  // Helper function to set pixel color with optional thickness
+  function setPixel(px, py, color, thickness = 1) {
+    for (let dx = 0; dx < thickness; dx++) {
+      for (let dy = 0; dy < thickness; dy++) {
+        const x = Math.floor(px) + dx;
+        const y = Math.floor(py) + dy;
+        if (x >= 0 && x < imageWidth && y >= 0) {
+          const pixelIndex = (y * imageWidth + x) * 4;
+          if (pixelIndex >= 0 && pixelIndex < buffer.length - 3) {
+            buffer[pixelIndex] = color[0];     // R
+            buffer[pixelIndex + 1] = color[1]; // G
+            buffer[pixelIndex + 2] = color[2]; // B
+            buffer[pixelIndex + 3] = color[3]; // A
+          }
+        }
+      }
+    }
+  }
+  
+  // Helper function to draw a smooth line between two points
+  function drawLine(x1, y1, x2, y2, thickness = 1) {
+    const dx = Math.abs(x2 - x1);
+    const dy = Math.abs(y2 - y1);
+    const sx = x1 < x2 ? 1 : -1;
+    const sy = y1 < y2 ? 1 : -1;
+    let err = dx - dy;
+    
+    let x = x1, y = y1;
+    while (true) {
+      setPixel(x, y, color, thickness);
+      
+      if (x === x2 && y === y2) break;
+      
+      const e2 = 2 * err;
+      if (e2 > -dy) {
+        err -= dy;
+        x += sx;
+      }
+      if (e2 < dx) {
+        err += dx;
+        y += sy;
+      }
+    }
+  }
+  
+  // Helper function to draw a smooth quadratic curve
+  function drawSmoothCurve(x1, y1, x2, y2, x3, y3, thickness = 1) {
+    const steps = Math.max(Math.abs(x3 - x1), Math.abs(y3 - y1), 10);
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const t2 = t * t;
+      const oneMinusT = 1 - t;
+      const oneMinusT2 = oneMinusT * oneMinusT;
+      
+      const x = oneMinusT2 * x1 + 2 * oneMinusT * t * x2 + t2 * x3;
+      const y = oneMinusT2 * y1 + 2 * oneMinusT * t * y2 + t2 * y3;
+      
+      setPixel(x, y, color, thickness);
+    }
+  }
+  
+  // Calculate center and edge points for the tile
+  const centerX = startX + cellSize / 2;
+  const centerY = startY + cellSize / 2;
+  const topY = startY;
+  const bottomY = startY + cellSize - 1;
+  const leftX = startX;
+  const rightX = startX + cellSize - 1;
+  
+  // Line thickness for smoother appearance
+  const lineThickness = 2;
+  
+  // Draw river segment based on type with smoother curves
+  switch (riverType) {
+    case 'horizontal':
+      // Horizontal line from left edge to right edge
+      drawLine(leftX, centerY, rightX, centerY, lineThickness);
+      break;
+      
+    case 'vertical':
+      // Vertical line from top edge to bottom edge
+      drawLine(centerX, topY, centerX, bottomY, lineThickness);
+      break;
+      
+    case 'bend_ne':
+      // Smooth curve from north to east
+      const ne_controlX = centerX + cellSize * 0.3;
+      const ne_controlY = centerY - cellSize * 0.3;
+      drawSmoothCurve(centerX, topY, ne_controlX, ne_controlY, rightX, centerY, lineThickness);
+      break;
+      
+    case 'bend_nw':
+      // Smooth curve from north to west
+      const nw_controlX = centerX - cellSize * 0.3;
+      const nw_controlY = centerY - cellSize * 0.3;
+      drawSmoothCurve(centerX, topY, nw_controlX, nw_controlY, leftX, centerY, lineThickness);
+      break;
+      
+    case 'bend_se':
+      // Smooth curve from south to east
+      const se_controlX = centerX + cellSize * 0.3;
+      const se_controlY = centerY + cellSize * 0.3;
+      drawSmoothCurve(centerX, bottomY, se_controlX, se_controlY, rightX, centerY, lineThickness);
+      break;
+      
+    case 'bend_sw':
+      // Smooth curve from south to west
+      const sw_controlX = centerX - cellSize * 0.3;
+      const sw_controlY = centerY + cellSize * 0.3;
+      drawSmoothCurve(centerX, bottomY, sw_controlX, sw_controlY, leftX, centerY, lineThickness);
+      break;
+      
+    case 'bend_en':
+      // Smooth curve from east to north
+      const en_controlX = centerX + cellSize * 0.3;
+      const en_controlY = centerY - cellSize * 0.3;
+      drawSmoothCurve(rightX, centerY, en_controlX, en_controlY, centerX, topY, lineThickness);
+      break;
+      
+    case 'bend_es':
+      // Smooth curve from east to south
+      const es_controlX = centerX + cellSize * 0.3;
+      const es_controlY = centerY + cellSize * 0.3;
+      drawSmoothCurve(rightX, centerY, es_controlX, es_controlY, centerX, bottomY, lineThickness);
+      break;
+      
+    case 'bend_wn':
+      // Smooth curve from west to north
+      const wn_controlX = centerX - cellSize * 0.3;
+      const wn_controlY = centerY - cellSize * 0.3;
+      drawSmoothCurve(leftX, centerY, wn_controlX, wn_controlY, centerX, topY, lineThickness);
+      break;
+      
+    case 'bend_ws':
+      // Smooth curve from west to south
+      const ws_controlX = centerX - cellSize * 0.3;
+      const ws_controlY = centerY + cellSize * 0.3;
+      drawSmoothCurve(leftX, centerY, ws_controlX, ws_controlY, centerX, bottomY, lineThickness);
+      break;
+      
+    default:
+      // For unknown types, draw a simple cross to indicate presence
+      drawLine(leftX, centerY, rightX, centerY, lineThickness);
+      drawLine(centerX, topY, centerX, bottomY, lineThickness);
+      break;
+  }
+}
 
 export async function generateStableSeedPngs() {
   console.log('Generating stable seed PNG images using chunk-based generation...\n');
@@ -89,7 +316,7 @@ export async function generateStableSeedPngs() {
       const oceanPercentage = (oceanCount / totalTiles) * 100;
       const landPercentage = (landCount / totalTiles) * 100;
       
-      // Generate simple PNG only (elevation images removed per requirement)
+      // Generate simple PNG (terrain with rivers)
       const simplePngPath = path.join(imageDir, `seed-${seed}-simple.png`);
       
       await saveMapPng(map, simplePngPath, {
@@ -99,12 +326,16 @@ export async function generateStableSeedPngs() {
         showElevation: false
       });
       
+      // Generate river-only debug PNG for clear river visualization
+      await generateRiverOnlyPng(map, mapSize, path.join(imageDir, `seed-${seed}-rivers-only.png`));
+      
       results.push({
         seed,
         oceanPercentage: oceanPercentage.toFixed(1),
         landPercentage: landPercentage.toFixed(1),
         meetsSpecs: oceanPercentage >= 25 && oceanPercentage <= 35,
-        simplePng: `seed-${seed}-simple.png`
+        simplePng: `seed-${seed}-simple.png`,
+        riversOnlyPng: `seed-${seed}-rivers-only.png`
       });
       
       console.log(`  Ocean: ${oceanPercentage.toFixed(1)}%, Land: ${landPercentage.toFixed(1)}%`);
@@ -146,8 +377,9 @@ These images should be updated whenever the world generator algorithm changes.
 
 ## Files
 
-Each seed generates one image:
-- \`seed-{number}-simple.png\`: Simple land (green) vs ocean (blue) visualization
+Each seed generates two images:
+- \`seed-{number}-simple.png\`: Full terrain with rivers overlay (biome colors with blue river overlay)
+- \`seed-{number}-rivers-only.png\`: River-only debug visualization (white=land, light blue=ocean, blue=rivers)
 
 ## Stable Seeds
 
@@ -164,6 +396,15 @@ ${results.map((r, i) =>
 - Only 'land' and 'ocean' tile types ✓
 - Deterministic generation with seeds ✓
 - 1-3 continents separated by ocean
+- River flow from sources to eventually lakes or ocean ✓
+
+## River Debug Images
+
+The \`-rivers-only.png\` images clearly show river flow patterns:
+- **White**: Land areas without rivers
+- **Light Blue**: Ocean areas (to show coastlines)
+- **Blue**: River segments flowing from sources to ocean/lakes
+- Rivers should be visible as continuous blue lines connecting mountain sources to ocean
 `;
   
   await fs.writeFile(readmePath, readmeContent);

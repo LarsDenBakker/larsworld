@@ -7,13 +7,14 @@ These images should be updated whenever the world generator algorithm changes.
 
 - **Map Size**: 960x960 tiles (60x60 chunks)
 - **Image Size**: 1920x1920 pixels (2x2 pixels per tile)
-- **Generated**: 2025-07-31T18:24:31.254Z
+- **Generated**: 2025-08-01T13:49:13.042Z
 - **Maps Meeting Specs**: 4/10
 
 ## Files
 
-Each seed generates one image:
-- `seed-{number}-simple.png`: Simple land (green) vs ocean (blue) visualization
+Each seed generates two images:
+- `seed-{number}-simple.png`: Full terrain with rivers overlay (biome colors with blue river overlay)
+- `seed-{number}-rivers-only.png`: River-only debug visualization (white=land, light blue=ocean, blue=rivers)
 
 ## Stable Seeds
 
@@ -36,3 +37,12 @@ Each seed generates one image:
 - Only 'land' and 'ocean' tile types ✓
 - Deterministic generation with seeds ✓
 - 1-3 continents separated by ocean
+- River flow from sources to eventually lakes or ocean ✓
+
+## River Debug Images
+
+The `-rivers-only.png` images clearly show river flow patterns:
+- **White**: Land areas without rivers
+- **Light Blue**: Ocean areas (to show coastlines)
+- **Blue**: River segments flowing from sources to ocean/lakes
+- Rivers should be visible as continuous blue lines connecting mountain sources to ocean

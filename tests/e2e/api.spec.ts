@@ -252,4 +252,79 @@ test.describe('Backend API', () => {
     });
     expect(res.status()).toBe(400);
   });
+
+  test('batch /chunks returns 400 for empty chunks array', async ({ request }) => {
+    const res = await request.post(`${API}/chunks`, {
+      data: { chunks: [], seed: 'test' }
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('batch /chunks with very large request returns partial results instead of 413', async ({ request }) => {
+    // Request enough chunks to exceed the 6MB limit (~470 chunks × ~12KB each)
+    const manyChunks = Array.from({ length: 600 }, (_, i) => ({
+      chunkX: i % 30,
+      chunkY: Math.floor(i / 30)
+    }));
+
+    const res = await request.post(`${API}/chunks`, {
+      data: { chunks: manyChunks, seed: 'large-batch' }
+    });
+
+    // Should succeed (200) and return partial results rather than failing with 413
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+
+    expect(body.chunks).toBeDefined();
+    expect(Array.isArray(body.chunks)).toBe(true);
+    // Should have generated some chunks but not all 600
+    expect(body.chunks.length).toBeGreaterThan(0);
+    expect(body.chunks.length).toBeLessThan(600);
+    // partial flag should be set
+    expect(body.partial).toBe(true);
+    // total size should be within the 6MB limit
+    expect(body.totalSizeBytes).toBeLessThanOrEqual(6 * 1024 * 1024);
+  });
+
+  test('batch /chunks within size limit returns all requested chunks and no partial flag', async ({ request }) => {
+    const smallBatch = Array.from({ length: 5 }, (_, i) => ({
+      chunkX: i,
+      chunkY: 0
+    }));
+
+    const res = await request.post(`${API}/chunks`, {
+      data: { chunks: smallBatch, seed: 'small-batch' }
+    });
+
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+
+    expect(body.chunks).toHaveLength(5);
+    expect(body.partial).toBeFalsy();
+  });
+
+  test('lake tiles only appear on land tiles', async ({ request }) => {
+    const res = await request.post(`${API}/chunks`, {
+      data: {
+        seed: '12345',
+        chunks: Array.from({ length: 25 }, (_, i) => ({
+          chunkX: Math.floor(i / 5) + 20,
+          chunkY: (i % 5) + 20
+        }))
+      }
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+
+    for (const chunk of body.chunks) {
+      for (const row of chunk.tiles) {
+        for (const tile of row) {
+          if (tile.l === 1) {
+            // lake tile must be land
+            expect(tile.t).toBe(1);
+          }
+        }
+      }
+    }
+  });
 });

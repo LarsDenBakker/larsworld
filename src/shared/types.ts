@@ -137,6 +137,8 @@ export interface MapBatchChunkResponse {
   chunks: MapChunkResponse[];
   totalSizeBytes: number;
   seed: string;
+  /** True when the response is truncated because the 6MB payload limit was reached */
+  partial?: boolean;
 }
 
 // Error response format

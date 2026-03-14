@@ -130,27 +130,32 @@ router.post('/chunks', (req, res) => {
       }
     }
 
+    const MAX_BATCH_SIZE_BYTES = 6 * 1024 * 1024;
+
     console.log(`[Batch Chunks] Request: ${chunks.length} chunks, seed=${seed}`);
 
     const startTime = Date.now();
     let totalSizeBytes = 0;
     const generatedChunks = [];
+    let partial = false;
 
-    // Generate each chunk
+    // Generate each chunk, stopping before we exceed the 6MB limit
     for (const { chunkX, chunkY } of chunks) {
       const request: MapChunkRequest = { chunkX, chunkY, seed };
-      
+
       try {
         validateMapChunkRequest(request);
         const chunkResponse = generateMapChunk(request);
-        generatedChunks.push(chunkResponse);
-        totalSizeBytes += chunkResponse.sizeBytes;
 
-        // Check if we're approaching the 6MB limit
-        if (totalSizeBytes > 6 * 1024 * 1024) {
-          console.warn(`[Batch Chunks] Payload size ${Math.round(totalSizeBytes / 1024 / 1024 * 100) / 100}MB exceeds 6MB limit`);
+        // Stop before adding this chunk if it would push us over the limit
+        if (totalSizeBytes + chunkResponse.sizeBytes > MAX_BATCH_SIZE_BYTES) {
+          partial = true;
+          console.warn(`[Batch Chunks] Stopping at ${generatedChunks.length} chunks to stay under 6MB limit`);
           break;
         }
+
+        generatedChunks.push(chunkResponse);
+        totalSizeBytes += chunkResponse.sizeBytes;
       } catch (chunkError) {
         console.error(`[Batch Chunks] Failed to generate chunk (${chunkX}, ${chunkY}):`, chunkError);
         // Continue with other chunks rather than failing the entire batch
@@ -159,21 +164,14 @@ router.post('/chunks', (req, res) => {
 
     const duration = Date.now() - startTime;
 
-    if (totalSizeBytes > 6 * 1024 * 1024) {
-      const error: ApiError = {
-        error: 'Batch payload too large',
-        details: `Generated ${Math.round(totalSizeBytes / 1024 / 1024 * 100) / 100}MB, exceeds 6MB limit. Consider requesting fewer chunks.`
-      };
-      return res.status(413).json(error);
-    }
-
     const response: MapBatchChunkResponse = {
       chunks: generatedChunks,
       totalSizeBytes,
-      seed
+      seed,
+      ...(partial && { partial: true })
     };
 
-    console.log(`[Batch Chunks] Generated ${generatedChunks.length} chunks in ${duration}ms, total size: ${Math.round(totalSizeBytes / 1024)}KB`);
+    console.log(`[Batch Chunks] Generated ${generatedChunks.length}/${chunks.length} chunks in ${duration}ms, total size: ${Math.round(totalSizeBytes / 1024)}KB${partial ? ' (partial)' : ''}`);
 
     res.json(response);
 

@@ -123,10 +123,8 @@ export class WorldMap extends LitElement {
     if (!this.canvas) {
       this._initializeCanvas();
     }
-    
-    if (changedProperties.has('chunks') && this.chunks.size > 0) {
-      this._renderMap();
-    }
+    // Note: chunks are rendered incrementally via addChunk() calls,
+    // so we intentionally do not call _renderMap() here to avoid double-rendering.
   }
 
   private _initializeCanvas() {
@@ -163,49 +161,24 @@ export class WorldMap extends LitElement {
     }
   }
 
-  addChunk(chunkX: number, chunkY: number, chunkData: ChunkData, minX: number, minY: number) {
+  addChunk(chunkX: number, chunkY: number, chunkData: ChunkData, _minX?: number, _minY?: number) {
     const chunkKey = `${chunkX},${chunkY}`;
     this.chunks.set(chunkKey, chunkData);
-    this._renderChunk(chunkX, chunkY, chunkData, minX, minY);
+    this._renderChunk(chunkX, chunkY, chunkData);
   }
 
-  private _renderChunk(chunkX: number, chunkY: number, chunkData: ChunkData, minX: number, minY: number) {
-    if (!this.context || !chunkData) return;
-
-    const offsetX = (chunkX - minX) * this.chunkSize * this.tileSize;
-    const offsetY = (chunkY - minY) * this.chunkSize * this.tileSize;
-
-    for (let y = 0; y < this.chunkSize; y++) {
-      for (let x = 0; x < this.chunkSize; x++) {
-        const tileIndex = y * this.chunkSize + x;
-        const tile = chunkData[tileIndex];
-
-        if (tile && tile.biome) {
-          const color = this._getBiomeColor(tile.biome as BiomeKey, tile.elevation);
-          this.context.fillStyle = color;
-          this.context.fillRect(
-            offsetX + x * this.tileSize,
-            offsetY + y * this.tileSize,
-            this.tileSize,
-            this.tileSize
-          );
-        }
-      }
-    }
-  }
-
-  private _renderMap() {
+  /**
+   * Render all chunks currently in the map. Uses stored minChunkX/Y set by setMapSize().
+   */
+  renderMap() {
     if (!this.context) return;
-
     this.chunks.forEach((chunkData, chunkKey) => {
       const [chunkX, chunkY] = chunkKey.split(',').map(Number);
-      // Note: We'd need minX, minY passed in for proper rendering
-      // This is a simplified version
-      this._renderChunkSimple(chunkX, chunkY, chunkData);
+      this._renderChunk(chunkX, chunkY, chunkData);
     });
   }
 
-  private _renderChunkSimple(chunkX: number, chunkY: number, chunkData: ChunkData) {
+  private _renderChunk(chunkX: number, chunkY: number, chunkData: ChunkData) {
     if (!this.context || !chunkData) return;
 
     const offsetX = (chunkX - this.minChunkX) * this.chunkSize * this.tileSize;
@@ -215,7 +188,7 @@ export class WorldMap extends LitElement {
       for (let x = 0; x < this.chunkSize; x++) {
         const tileIndex = y * this.chunkSize + x;
         const tile = chunkData[tileIndex];
-        
+
         if (tile && tile.biome) {
           const color = this._getBiomeColor(tile.biome as BiomeKey, tile.elevation);
           this.context.fillStyle = color;
@@ -232,24 +205,25 @@ export class WorldMap extends LitElement {
 
   private _getBiomeColor(biome: BiomeKey, elevation = 0): string {
     const baseColor = WorldMap.BIOME_COLORS[biome] || '#cccccc';
-    
-    // Apply elevation shading (darker = higher elevation)
-    if (elevation > 0.5) {
-      return this._darkenColor(baseColor, 0.3);
-    } else if (elevation > 0.3) {
-      return this._darkenColor(baseColor, 0.15);
+
+    // Apply elevation shading for land tiles only (elevation 0.5–1.0).
+    // Scale within the land range so lower land stays unshaded and
+    // high mountains are noticeably darker.
+    if (elevation >= 0.5) {
+      const landElevation = (elevation - 0.5) / 0.5; // 0–1 within land range
+      if (landElevation > 0.6) return this._darkenColor(baseColor, 0.3);
+      if (landElevation > 0.3) return this._darkenColor(baseColor, 0.15);
     }
-    
+
     return baseColor;
   }
 
   private _darkenColor(color: string, factor: number): string {
-    // Simple color darkening
     const hex = color.replace('#', '');
-    const r = Math.floor(parseInt(hex.substr(0, 2), 16) * (1 - factor));
-    const g = Math.floor(parseInt(hex.substr(2, 2), 16) * (1 - factor));
-    const b = Math.floor(parseInt(hex.substr(4, 2), 16) * (1 - factor));
-    
+    const r = Math.floor(parseInt(hex.substring(0, 2), 16) * (1 - factor));
+    const g = Math.floor(parseInt(hex.substring(2, 4), 16) * (1 - factor));
+    const b = Math.floor(parseInt(hex.substring(4, 6), 16) * (1 - factor));
+
     return `rgb(${r}, ${g}, ${b})`;
   }
 

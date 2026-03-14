@@ -218,27 +218,28 @@ export class WorldGenerator extends LitElement {
 
       const batchData = await response.json();
       
+      // Set canvas size once before processing the first batch
+      if (!this.canvasSizeSet) {
+        const worldMap = this._getWorldMap();
+        if (worldMap) {
+          worldMap.setMapSize(this.minX, this.maxX, this.minY, this.maxY);
+          worldMap.clear();
+          this.canvasSizeSet = true;
+        }
+      }
+
       // Process each chunk in the batch
+      const worldMap = this._getWorldMap();
       for (const chunkResponse of batchData.chunks) {
         const { chunkX, chunkY, tiles } = chunkResponse;
-        
-        // Set canvas size before processing first chunk
-        if (!this.canvasSizeSet) {
-          const worldMap = this._getWorldMap();
-          if (worldMap) {
-            worldMap.setMapSize(this.minX, this.maxX, this.minY, this.maxY);
-            worldMap.clear();
-            this.canvasSizeSet = true;
-          }
-        }
-        
+
         // Convert response format to the expected ChunkData format
         const chunkData: ChunkData = {};
         for (let y = 0; y < 16; y++) {
           for (let x = 0; x < 16; x++) {
             const tileIndex = y * 16 + x;
             const tile = tiles[y][x];
-            
+
             // Convert compact tile format to expected format
             chunkData[tileIndex] = {
               biome: this._getBiomeFromCompactTile(tile),
@@ -246,17 +247,14 @@ export class WorldGenerator extends LitElement {
             };
           }
         }
-        
-        // Add chunk to map and render with fade animation
+
         this.chunks.set(`${chunkX},${chunkY}`, chunkData);
-        // Trigger reactive update by reassigning the Map
-        this.chunks = new Map(this.chunks);
-        const worldMap = this._getWorldMap();
         worldMap?.addChunk(chunkX, chunkY, chunkData, this.minX, this.minY);
-        
         this.loadedChunks++;
       }
-      
+
+      // Trigger one reactive update per batch instead of one per chunk
+      this.chunks = new Map(this.chunks);
       this.statusMessage = `Loaded ${this.loadedChunks}/${this.totalChunks} chunks (batch of ${batchData.chunks.length})`;
 
     } catch (error) {

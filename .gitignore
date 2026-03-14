@@ -22,3 +22,7 @@ pnpm-debug.log*
 
 # Temporary files
 /tmp/
+
+# Auto-generated test artifacts (timestamp changes on every run)
+/test/map-images/generation-report.json
+/test/map-images/README.md

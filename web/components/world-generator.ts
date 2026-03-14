@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import './control-panel.ts';
-import './world-map.ts';
+import { WorldMap } from './world-map.ts';
 
 interface ChunkCoordinate {
   x: number;
@@ -53,7 +53,7 @@ export class WorldGenerator extends LitElement {
   declare statusMessage: string;
   declare chunks: Map<string, ChunkData>;
 
-  worldMap: any;
+  worldMap: WorldMap | null = null;
 
   // Private generation state
   private activeRequests = 0;
@@ -98,9 +98,10 @@ export class WorldGenerator extends LitElement {
 
   private _handleCoordinateChange(event: CustomEvent<CoordinateChangeDetail>) {
     const { detail } = event;
-    Object.keys(detail).forEach(key => {
-      (this as any)[key] = detail[key];
-    });
+    if ('minX' in detail) this.minX = detail['minX'];
+    if ('maxX' in detail) this.maxX = detail['maxX'];
+    if ('minY' in detail) this.minY = detail['minY'];
+    if ('maxY' in detail) this.maxY = detail['maxY'];
   }
 
   private _handleWorldNameChange(event: CustomEvent<WorldNameChangeDetail>) {
@@ -270,13 +271,13 @@ export class WorldGenerator extends LitElement {
     }
   }
 
-  private _getBiomeFromCompactTile(tile: any): string {
-    // Map biome indices to biome names based on BIOME_TYPES from shared/types.ts
+  private _getBiomeFromCompactTile(tile: { b: number; e: number }): string {
+    // Biome names matching BIOME_TYPES order from shared/types.ts
     const biomes = [
       'deep_ocean', 'shallow_ocean', 'desert', 'tundra', 'arctic', 'swamp',
       'grassland', 'forest', 'taiga', 'savanna', 'tropical_forest', 'alpine'
     ];
-    return biomes[tile.b] || 'grassland';
+    return biomes[tile.b] ?? 'grassland';
   }
 
   render() {

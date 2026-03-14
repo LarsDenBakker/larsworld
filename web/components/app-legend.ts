@@ -11,6 +11,8 @@ export class AppLegend extends LitElement {
   // TypeScript property declarations
   declare isCollapsed: boolean;
 
+  private _boundHandleResize!: () => void;
+
   static styles = css`
     :host {
       position: fixed;
@@ -104,27 +106,28 @@ export class AppLegend extends LitElement {
 
   constructor() {
     super();
-    (this as any).isCollapsed = window.innerWidth <= 768;
+    this.isCollapsed = window.innerWidth <= 768;
+    this._boundHandleResize = this._handleResize.bind(this);
   }
 
   connectedCallback() {
     super.connectedCallback();
-    window.addEventListener('resize', this._handleResize.bind(this));
+    window.addEventListener('resize', this._boundHandleResize);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    window.removeEventListener('resize', this._handleResize.bind(this));
+    window.removeEventListener('resize', this._boundHandleResize);
   }
 
   private _handleResize() {
-    if (window.innerWidth <= 768 && !(this as any).isCollapsed) {
-      (this as any).isCollapsed = true;
+    if (window.innerWidth <= 768 && !this.isCollapsed) {
+      this.isCollapsed = true;
     }
   }
 
   private _toggleLegend() {
-    (this as any).isCollapsed = !(this as any).isCollapsed;
+    this.isCollapsed = !this.isCollapsed;
   }
 
   render() {

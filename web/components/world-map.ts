@@ -30,6 +30,8 @@ export class WorldMap extends LitElement {
   canvas!: HTMLCanvasElement;
 
   private context: CanvasRenderingContext2D | null = null;
+  private minChunkX = 0;
+  private minChunkY = 0;
 
   constructor() {
     super();
@@ -136,9 +138,12 @@ export class WorldMap extends LitElement {
   }
 
   setMapSize(minX: number, maxX: number, minY: number, maxY: number) {
+    this.minChunkX = minX;
+    this.minChunkY = minY;
+
     // Ensure canvas is initialized
     this._initializeCanvas();
-    
+
     if (!this.canvas) return;
 
     const widthChunks = maxX - minX + 1;
@@ -226,8 +231,8 @@ export class WorldMap extends LitElement {
   private _renderChunkSimple(chunkX: number, chunkY: number, chunkData: ChunkData) {
     if (!this.context || !chunkData) return;
 
-    const offsetX = chunkX * this.chunkSize * this.tileSize;
-    const offsetY = chunkY * this.chunkSize * this.tileSize;
+    const offsetX = (chunkX - this.minChunkX) * this.chunkSize * this.tileSize;
+    const offsetY = (chunkY - this.minChunkY) * this.chunkSize * this.tileSize;
 
     for (let y = 0; y < this.chunkSize; y++) {
       for (let x = 0; x < this.chunkSize; x++) {

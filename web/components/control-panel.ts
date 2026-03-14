@@ -244,13 +244,18 @@ export class ControlPanel extends LitElement {
     const target = event.target as HTMLInputElement;
     const { name, value } = target;
     const numValue = parseInt(value, 10);
-    
-    if (!isNaN(numValue)) {
-      (this as any)[name] = numValue;
-      this.dispatchEvent(new CustomEvent<CoordinateChangeDetail>('coordinate-change', {
-        detail: { [name]: numValue }
-      }));
-    }
+
+    if (isNaN(numValue)) return;
+
+    if (name === 'minX') this.minX = numValue;
+    else if (name === 'maxX') this.maxX = numValue;
+    else if (name === 'minY') this.minY = numValue;
+    else if (name === 'maxY') this.maxY = numValue;
+    else return;
+
+    this.dispatchEvent(new CustomEvent<CoordinateChangeDetail>('coordinate-change', {
+      detail: { [name]: numValue }
+    }));
   }
 
   private _handleWorldNameChange(event: Event) {

@@ -175,46 +175,23 @@ export class WorldMap extends LitElement {
     const offsetX = (chunkX - minX) * this.chunkSize * this.tileSize;
     const offsetY = (chunkY - minY) * this.chunkSize * this.tileSize;
 
-    // Add fade-in animation by using globalAlpha
-    this.context.save();
-    this.context.globalAlpha = 0.1;
+    for (let y = 0; y < this.chunkSize; y++) {
+      for (let x = 0; x < this.chunkSize; x++) {
+        const tileIndex = y * this.chunkSize + x;
+        const tile = chunkData[tileIndex];
 
-    // Gradually increase opacity for smooth fade-in
-    let opacity = 0.1;
-    const fadeIn = () => {
-      if (opacity >= 1) {
-        this.context!.restore();
-        return;
-      }
-      
-      this.context!.clearRect(offsetX, offsetY, 
-                       this.chunkSize * this.tileSize, 
-                       this.chunkSize * this.tileSize);
-      this.context!.globalAlpha = opacity;
-      
-      for (let y = 0; y < this.chunkSize; y++) {
-        for (let x = 0; x < this.chunkSize; x++) {
-          const tileIndex = y * this.chunkSize + x;
-          const tile = chunkData[tileIndex];
-          
-          if (tile && tile.biome) {
-            const color = this._getBiomeColor(tile.biome as BiomeKey, tile.elevation);
-            this.context!.fillStyle = color;
-            this.context!.fillRect(
-              offsetX + x * this.tileSize,
-              offsetY + y * this.tileSize,
-              this.tileSize,
-              this.tileSize
-            );
-          }
+        if (tile && tile.biome) {
+          const color = this._getBiomeColor(tile.biome as BiomeKey, tile.elevation);
+          this.context.fillStyle = color;
+          this.context.fillRect(
+            offsetX + x * this.tileSize,
+            offsetY + y * this.tileSize,
+            this.tileSize,
+            this.tileSize
+          );
         }
       }
-      
-      opacity += 0.1;
-      requestAnimationFrame(fadeIn);
-    };
-    
-    fadeIn();
+    }
   }
 
   private _renderMap() {
@@ -290,16 +267,15 @@ export class WorldMap extends LitElement {
 
     return html`
       <div class="map-container">
-        ${hasChunks ? html`
-          <canvas></canvas>
-        ` : html`
+        <canvas style="${hasChunks ? '' : 'display:none'}"></canvas>
+        ${!hasChunks ? html`
           <div class="map-placeholder">
-            ${this.isGenerating ? 
-              '🌍 Generating chunks...' : 
+            ${this.isGenerating ?
+              '🌍 Generating chunks...' :
               '🗺️ Click "Start Generation" to create a world'
             }
           </div>
-        `}
+        ` : ''}
         
         ${this.isGenerating ? html`
           <div class="progress-info">

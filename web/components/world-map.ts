@@ -4,6 +4,8 @@ interface ChunkData {
   [key: number]: {
     biome: string;
     elevation: number;
+    river: number;
+    lake: boolean;
   };
 }
 
@@ -198,6 +200,25 @@ export class WorldMap extends LitElement {
             this.tileSize,
             this.tileSize
           );
+
+          // Render lake or river overlay (matching PNG generator: 70% water, 30% terrain)
+          if (tile.lake) {
+            this.context.fillStyle = 'rgba(30, 120, 180, 0.85)';
+            this.context.fillRect(
+              offsetX + x * this.tileSize,
+              offsetY + y * this.tileSize,
+              this.tileSize,
+              this.tileSize
+            );
+          } else if (tile.river > 0) {
+            this.context.fillStyle = 'rgba(64, 164, 223, 0.75)';
+            this.context.fillRect(
+              offsetX + x * this.tileSize,
+              offsetY + y * this.tileSize,
+              this.tileSize,
+              this.tileSize
+            );
+          }
         }
       }
     }

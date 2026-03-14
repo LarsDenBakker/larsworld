@@ -12,6 +12,8 @@ interface ChunkData {
   [key: number]: {
     biome: string;
     elevation: number;
+    river: number;
+    lake: boolean;
   };
 }
 
@@ -243,7 +245,9 @@ export class WorldGenerator extends LitElement {
             // Convert compact tile format to expected format
             chunkData[tileIndex] = {
               biome: this._getBiomeFromCompactTile(tile),
-              elevation: tile.e / 255
+              elevation: tile.e / 255,
+              river: tile.r,
+              lake: tile.l === 1
             };
           }
         }

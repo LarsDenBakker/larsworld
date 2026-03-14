@@ -185,27 +185,27 @@ function calculateFlowDirection(x: number, y: number, seed: number): { dx: numbe
   const riverNoise = getRiverNoiseGenerators(seed);
   const meanderValue = riverNoise.meander.noise(x * 0.05, y * 0.05);
   
-  for (const dir of directions) {
+  for (let i = 0; i < directions.length; i++) {
+    const dir = directions[i];
     const neighborX = x + dir.dx;
     const neighborY = y + dir.dy;
     const neighborElevation = calculateLandStrengthAtChunk(neighborX, neighborY, seed);
-    
+
     const elevationDrop = currentElevation - neighborElevation;
-    
+
     // Only consider downward flow
     if (elevationDrop <= 0) continue;
-    
+
     // Calculate flow score considering elevation drop and meandering
     let flowScore = elevationDrop;
-    
+
     // Add slight preference for cardinal directions (more natural)
     if (dir.dx === 0 || dir.dy === 0) {
       flowScore *= 1.1;
     }
-    
-    // Add meandering influence based on direction
-    const directionIndex = directions.indexOf(dir);
-    const meanderInfluence = Math.sin(meanderValue * 8 + directionIndex) * 0.1;
+
+    // Add meandering influence based on direction index
+    const meanderInfluence = Math.sin(meanderValue * 8 + i) * 0.1;
     flowScore += meanderInfluence;
     
     if (flowScore > bestScore) {
@@ -222,9 +222,9 @@ function calculateFlowDirection(x: number, y: number, seed: number): { dx: numbe
  */
 interface RiverSystemData {
   riverSources: Array<{x: number, y: number}>;
+  riverSourceSet: Set<string>; // "x,y" for O(1) river source lookup
   riverPaths: Map<string, RiverType>; // "x,y" -> RiverType
-  lakes: Set<string>; // "x,y" for lake locations
-  standaloneLakes: Array<{x: number, y: number, radius: number}>; // Standalone lakes not connected to rivers
+  lakes: Set<string>; // "x,y" for lake locations (includes standalone lakes)
 }
 
 const riverSystemCache = new Map<number, RiverSystemData>();
@@ -240,7 +240,6 @@ function getRiverSystemData(seed: number): RiverSystemData {
   const riverSources: Array<{x: number, y: number}> = [];
   const riverPaths = new Map<string, RiverType>();
   const lakes = new Set<string>();
-  const standaloneLakes: Array<{x: number, y: number, radius: number}> = [];
   
   // Generate river sources with proper spacing
   const random = seedRandom(seed + 9999);
@@ -300,14 +299,21 @@ function getRiverSystemData(seed: number): RiverSystemData {
     generateRiverPath(source.x, source.y, seed, riverPaths, lakes, random);
   }
   
-  // Generate standalone lakes not connected to rivers
+  // Generate standalone lakes not connected to rivers, pre-computing their tiles into the main lakes Set
+  const standaloneLakes: Array<{x: number, y: number, radius: number}> = [];
   generateStandaloneLakes(seed, refWidth, refHeight, refOffsetX, refOffsetY, standaloneLakes, riverPaths, random);
-  
+  for (const lake of standaloneLakes) {
+    createLake(lake.x, lake.y, lakes, lake.radius, seed);
+  }
+
+  // Build river source set for O(1) lookup
+  const riverSourceSet = new Set(riverSources.map(s => `${s.x},${s.y}`));
+
   const systemData: RiverSystemData = {
     riverSources,
+    riverSourceSet,
     riverPaths,
     lakes,
-    standaloneLakes
   };
   
   riverSystemCache.set(seed, systemData);
@@ -644,19 +650,11 @@ function generateStandaloneLakes(seed: number, refWidth: number, refHeight: numb
 
 /**
  * Determine if a location should be a river source
- * Now uses the cached river system data
+ * Uses pre-built Set for O(1) lookup instead of O(n) scan
  */
 function isRiverSource(x: number, y: number, seed: number): boolean {
   const riverSystem = getRiverSystemData(seed);
-  
-  // Check if this location is one of the pre-generated river sources
-  for (const source of riverSystem.riverSources) {
-    if (source.x === x && source.y === y) {
-      return true;
-    }
-  }
-  
-  return false;
+  return riverSystem.riverSourceSet.has(`${x},${y}`);
 }
 
 /**
@@ -677,31 +675,11 @@ function calculateFlowAccumulation(x: number, y: number, seed: number): number {
 
 /**
  * Determine if a location is a lake
+ * Standalone lake tiles are pre-computed into the lakes Set during river system generation
  */
 function isLake(x: number, y: number, seed: number): boolean {
   const riverSystem = getRiverSystemData(seed);
-  
-  // Check if this location is a lake from the river system
-  const key = `${x},${y}`;
-  if (riverSystem.lakes.has(key)) {
-    return true;
-  }
-  
-  // Check if this location is part of a standalone lake
-  for (const lake of riverSystem.standaloneLakes) {
-    const dx = x - lake.x;
-    const dy = y - lake.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    if (distance <= lake.radius) {
-      const elevation = calculateLandStrengthAtChunk(x, y, seed);
-      // Only create lakes on land areas
-      if (elevation >= 0.5) {
-        return true;
-      }
-    }
-  }
-  
-  return false;
+  return riverSystem.lakes.has(`${x},${y}`);
 }
 
 /**

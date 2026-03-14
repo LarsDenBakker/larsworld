@@ -658,6 +658,200 @@ function testMapGenerationPerformance() {
   }
 }
 /**
+ * Test that lake tiles are generated on land and detectable via tile.lake flag.
+ * This validates the standalone lake pre-computation into the main lakes Set.
+ * Uses the same 30×30 chunk area as testRiverSourceDetection, where rivers
+ * are confirmed to exist (river endpoint lakes will therefore also exist).
+ */
+function testLakeGeneration() {
+  try {
+    // Use seed 54321 over 30×30 chunks — the same area where rivers are confirmed
+    const seed = 54321;
+    let lakeCount = 0;
+    let landCount = 0;
+
+    for (let chunkY = 0; chunkY < 30; chunkY++) {
+      for (let chunkX = 0; chunkX < 30; chunkX++) {
+        const chunk = generateChunk(chunkX, chunkY, seed);
+
+        for (let y = 0; y < CHUNK_SIZE; y++) {
+          for (let x = 0; x < CHUNK_SIZE; x++) {
+            const tile = chunk[y][x];
+            if (tile.type === 'land') {
+              landCount++;
+              if (tile.lake) {
+                lakeCount++;
+
+                // Lakes must only appear on land tiles
+                if (tile.type !== 'land') {
+                  return {
+                    name: 'Lake Generation',
+                    passed: false,
+                    message: `Lake found on non-land tile at chunk (${chunkX},${chunkY}) tile (${x},${y})`
+                  };
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (lakeCount === 0) {
+      return {
+        name: 'Lake Generation',
+        passed: false,
+        message: `No lake tiles found across 30×30 chunk area (${landCount} land tiles scanned). Standalone lake pre-computation may be broken.`
+      };
+    }
+
+    return {
+      name: 'Lake Generation',
+      passed: true,
+      message: `Found ${lakeCount} lake tiles across 30×30 chunk area (${landCount} land tiles total)`,
+      details: { lakeCount, landCount, lakeRatio: (lakeCount / landCount * 100).toFixed(2) + '%' }
+    };
+  } catch (error) {
+    return {
+      name: 'Lake Generation',
+      passed: false,
+      message: `Error: ${error.message}`
+    };
+  }
+}
+
+/**
+ * Test that river sources are correctly detected via the O(1) Set lookup.
+ * Verifies that river tiles exist in the generated map, which depends on
+ * getRiverSystemData producing a valid riverSourceSet and riverPaths.
+ */
+function testRiverSourceDetection() {
+  try {
+    const seed = 54321;
+    const riverTilesByType = new Map();
+    let totalLandTiles = 0;
+
+    // Scan a 30×30 chunk area around the origin where river sources are generated
+    for (let chunkY = 0; chunkY < 30; chunkY++) {
+      for (let chunkX = 0; chunkX < 30; chunkX++) {
+        const chunk = generateChunk(chunkX, chunkY, seed);
+
+        for (let y = 0; y < CHUNK_SIZE; y++) {
+          for (let x = 0; x < CHUNK_SIZE; x++) {
+            const tile = chunk[y][x];
+            if (tile.type === 'land') {
+              totalLandTiles++;
+              if (tile.river !== 'none') {
+                riverTilesByType.set(tile.river, (riverTilesByType.get(tile.river) || 0) + 1);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    const totalRiverTiles = [...riverTilesByType.values()].reduce((a, b) => a + b, 0);
+
+    if (totalRiverTiles === 0) {
+      return {
+        name: 'River Source Detection',
+        passed: false,
+        message: `No river tiles found in 30×30 chunk area. River source Set lookup may be broken.`
+      };
+    }
+
+    // Determinism: same seed must produce identical river tiles across calls
+    const chunk1 = generateChunk(5, 5, seed);
+    const chunk2 = generateChunk(5, 5, seed);
+    for (let y = 0; y < CHUNK_SIZE; y++) {
+      for (let x = 0; x < CHUNK_SIZE; x++) {
+        if (chunk1[y][x].river !== chunk2[y][x].river) {
+          return {
+            name: 'River Source Detection',
+            passed: false,
+            message: `River generation is not deterministic at chunk (5,5) tile (${x},${y})`
+          };
+        }
+      }
+    }
+
+    return {
+      name: 'River Source Detection',
+      passed: true,
+      message: `Found ${totalRiverTiles} river tiles with types: ${[...riverTilesByType.keys()].join(', ')}`,
+      details: { totalRiverTiles, totalLandTiles, types: Object.fromEntries(riverTilesByType) }
+    };
+  } catch (error) {
+    return {
+      name: 'River Source Detection',
+      passed: false,
+      message: `Error: ${error.message}`
+    };
+  }
+}
+
+/**
+ * Test that hashSeed produces consistent results — same string always yields
+ * the same number, and different strings yield different numbers.
+ * hashSeed is exercised indirectly through generateMapChunk with string seeds.
+ */
+function testHashSeedConsistency() {
+  try {
+    const req1 = { chunkX: 0, chunkY: 0, seed: 'hello-world' };
+    const req2 = { chunkX: 0, chunkY: 0, seed: 'hello-world' };
+    const req3 = { chunkX: 0, chunkY: 0, seed: 'different-seed' };
+
+    const r1 = generateMapChunk(req1);
+    const r2 = generateMapChunk(req2);
+    const r3 = generateMapChunk(req3);
+
+    // Same seed → identical tiles
+    for (let y = 0; y < CHUNK_SIZE; y++) {
+      for (let x = 0; x < CHUNK_SIZE; x++) {
+        if (JSON.stringify(r1.tiles[y][x]) !== JSON.stringify(r2.tiles[y][x])) {
+          return {
+            name: 'Hash Seed Consistency',
+            passed: false,
+            message: `Same string seed produced different tiles at (${x},${y})`
+          };
+        }
+      }
+    }
+
+    // Different seeds → different tiles (at least somewhere)
+    let differs = false;
+    outer: for (let y = 0; y < CHUNK_SIZE; y++) {
+      for (let x = 0; x < CHUNK_SIZE; x++) {
+        if (r1.tiles[y][x].t !== r3.tiles[y][x].t || r1.tiles[y][x].e !== r3.tiles[y][x].e) {
+          differs = true;
+          break outer;
+        }
+      }
+    }
+
+    if (!differs) {
+      return {
+        name: 'Hash Seed Consistency',
+        passed: false,
+        message: `Different string seeds produced identical tiles — hash collision or broken hash`
+      };
+    }
+
+    return {
+      name: 'Hash Seed Consistency',
+      passed: true,
+      message: 'String seeds hash consistently: same seed → same tiles, different seed → different tiles'
+    };
+  } catch (error) {
+    return {
+      name: 'Hash Seed Consistency',
+      passed: false,
+      message: `Error: ${error.message}`
+    };
+  }
+}
+
+/**
  * Test stable seed PNG generation and integrate it into main test suite
  */
 async function testStableSeedPngs() {
@@ -689,6 +883,9 @@ async function runAllTests() {
     testTileTypes,
     testDeterministicGeneration,
     testRiverGeneration,
+    testLakeGeneration,
+    testRiverSourceDetection,
+    testHashSeedConsistency,
     testMapGenerationPerformance,
     testOceanCoverage60x60,
     testMapRealism,

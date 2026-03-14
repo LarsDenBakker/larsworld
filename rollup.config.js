@@ -24,7 +24,7 @@ export default {
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1.0' }
       ],
-      template: ({ attributes, files, meta, publicPath, title }) => {
+      template: ({ files, meta, publicPath, title }) => {
         const scripts = (files.js || [])
           .map(({ fileName }) => `<script type="module" src="${publicPath}${fileName}"></script>`)
           .join('\n    ');

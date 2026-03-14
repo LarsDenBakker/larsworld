@@ -146,7 +146,7 @@ async function main() {
       // Try to parse as JSON first
       const deployData = JSON.parse(deployResult.stdout);
       deployUrl = deployData.deploy_url || deployData.url;
-    } catch (parseError) {
+    } catch {
       // Fallback to text parsing
       deployUrl = extractDeployUrl(deployResult.stdout);
     }

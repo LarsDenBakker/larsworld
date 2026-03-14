@@ -22,7 +22,14 @@
     "test:e2e:preview": "node scripts/test-e2e-preview.js",
     "test:install": "playwright install",
     "test:report": "playwright show-report",
-    "post-pr-comment": "node scripts/post-pr-comment.cjs"
+    "post-pr-comment": "node scripts/post-pr-comment.cjs",
+    "lint": "eslint src/ netlify/ web/components/ test/ scripts/ *.js",
+    "lint:fix": "eslint src/ netlify/ web/components/ test/ scripts/ *.js --fix",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.ts": "eslint --max-warnings 0",
+    "*.js": "eslint --max-warnings 0"
   },
   "keywords": [
     "game",
@@ -41,11 +48,18 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.23",
     "@types/node": "^20.12.12",
+    "@typescript-eslint/eslint-plugin": "^8.57.0",
+    "@typescript-eslint/parser": "^8.57.0",
     "@web/dev-server": "^0.4.6",
     "@web/dev-server-esbuild": "^1.0.4",
     "@web/dev-server-rollup": "^0.6.4",
     "@web/test-runner": "^0.20.2",
     "concurrently": "^9.2.0",
+    "eslint": "^9.39.4",
+    "eslint-plugin-import": "^2.32.0",
+    "globals": "^17.4.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "netlify-cli": "^22.4.0",
     "node-fetch": "^3.3.2",
     "rollup": "^4.46.2",

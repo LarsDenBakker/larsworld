@@ -11,13 +11,10 @@ export interface Tile {
   lake: boolean; // Whether this tile contains a lake
 }
 
-// Import shared types for paginated generation
-import { 
-  MapPageRequest, 
-  MapPageResponse, 
+import {
   MapChunkRequest,
   MapChunkResponse,
-  CompactTile, 
+  CompactTile,
   tileToCompact,
   BiomeType,
   ElevationType,
@@ -646,31 +643,6 @@ function generateStandaloneLakes(seed: number, refWidth: number, refHeight: numb
       standaloneLakes.push({ x, y, radius });
     }
   }
-}
-
-/**
- * Determine if a location should be a river source
- * Uses pre-built Set for O(1) lookup instead of O(n) scan
- */
-function isRiverSource(x: number, y: number, seed: number): boolean {
-  const riverSystem = getRiverSystemData(seed);
-  return riverSystem.riverSourceSet.has(`${x},${y}`);
-}
-
-/**
- * Calculate realistic flow accumulation using cached river system
- * Now much simpler - just check if this tile is part of a river path
- */
-function calculateFlowAccumulation(x: number, y: number, seed: number): number {
-  const riverSystem = getRiverSystemData(seed);
-  const key = `${x},${y}`;
-  
-  // If this tile is part of a river path, return high accumulation
-  if (riverSystem.riverPaths.has(key)) {
-    return 5.0; // High value to ensure river generation
-  }
-  
-  return 0.0; // No accumulation for non-river tiles
 }
 
 /**

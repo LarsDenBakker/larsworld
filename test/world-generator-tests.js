@@ -3,7 +3,7 @@
  * Tests only the requirements specified in specs/world-generator.md
  * Updated for chunk-based generation only - legacy map generation removed
  */
-import { generateChunk, generateMapChunk, validateMapChunkRequest, benchmarkChunkGeneration, clearGenerationCaches } from '../dist/src/map-generator/index.js';
+import { generateChunk, generateMapChunk, validateMapChunkRequest, clearGenerationCaches } from '../dist/src/map-generator/index.js';
 import { CHUNK_SIZE } from '../dist/src/shared/types.js';
 import { generateStableSeedPngs } from './stable-seed-pngs.js';
 
@@ -581,7 +581,7 @@ function testMapGenerationPerformance() {
     
     // Test single chunk performance
     const singleChunkStart = performance.now();
-    const chunk = generateChunk(0, 0, 12345);
+    generateChunk(0, 0, 12345);
     const singleChunkTime = performance.now() - singleChunkStart;
     
     console.log(`  Single chunk: ${singleChunkTime.toFixed(2)}ms`);

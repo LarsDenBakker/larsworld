@@ -253,14 +253,14 @@ function drawRiverSegment(buffer, tileX, tileY, riverType, cellSize, imageWidth,
   }
 }
 
-export async function generateStableSeedPngs() {
+export async function generateStableSeedPngs(outputDir) {
   console.log('Generating stable seed PNG images using chunk-based generation...\n');
-  
+
   // Generate 960x960 maps (60x60 chunks) for visual validation
   // Same size as main ocean coverage tests
   const chunksPerSide = 60;
   const mapSize = chunksPerSide * CHUNK_SIZE; // 960x960
-  const imageDir = path.join(__dirname, 'map-images');
+  const imageDir = outputDir || path.join(__dirname, 'map-images');
   
   // Ensure directory exists
   const fs = await import('fs/promises');

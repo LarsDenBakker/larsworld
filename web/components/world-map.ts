@@ -120,7 +120,7 @@ export class WorldMap extends LitElement {
     this._initializeCanvas();
   }
 
-  updated(changedProperties: Map<string | number | symbol, unknown>) {
+  updated(_changedProperties: Map<string | number | symbol, unknown>) {
     // Ensure canvas is initialized when it becomes available
     if (!this.canvas) {
       this._initializeCanvas();

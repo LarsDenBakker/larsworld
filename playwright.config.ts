@@ -67,8 +67,8 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
-          `${process.env.HOME}/.cache/ms-playwright/chromium-1194/chrome-linux/chrome`,
+        // Uses chromium_headless_shell-1181 symlinked to the installed version (1194)
+        // See: /root/.cache/ms-playwright/chromium_headless_shell-1181 -> 1194
       },
     },
 
@@ -98,7 +98,7 @@ export default defineConfig({
   webServer: process.env.SKIP_LOCAL_SERVER ? undefined : [
     {
       command: 'npm start',
-      url: 'http://localhost:3000',
+      url: 'http://localhost:3000/api/ping',
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,
     },

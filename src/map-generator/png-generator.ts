@@ -4,7 +4,7 @@
  */
 import sharp from 'sharp';
 import { Tile } from './index.js';
-import { BiomeType, ElevationType, RiverType } from '../shared/types.js';
+import { BiomeType, RiverType } from '../shared/types.js';
 
 export interface PngGenerationOptions {
   width: number;

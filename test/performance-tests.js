@@ -159,7 +159,7 @@ async function runPerformanceTests() {
   
   try {
     const singleChunkTime = testBasicPerformance();
-    const scalingResults = testScalingPerformance();
+    testScalingPerformance();
     const cacheResults = testCacheEffectiveness();
     
     // Run 60x60 test only if basic performance is reasonable

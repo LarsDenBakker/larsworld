@@ -65,10 +65,10 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { 
+      use: {
         ...devices['Desktop Chrome'],
-        // Use system Chrome browser to avoid download issues
-        channel: 'chrome',
+        executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
+          `${process.env.HOME}/.cache/ms-playwright/chromium-1194/chrome-linux/chrome`,
       },
     },
 

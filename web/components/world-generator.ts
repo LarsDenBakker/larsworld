@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import './control-panel.ts';
-import { WorldMap } from './world-map.ts';
+import './world-map.ts'; // side-effect: registers 'world-map' custom element
+import type { WorldMap } from './world-map.ts';
 
 interface ChunkCoordinate {
   x: number;

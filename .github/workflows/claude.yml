@@ -55,9 +55,16 @@ jobs:
             npm run lint        # ESLint — must have 0 errors
             npm run build       # TypeScript compilation + rollup bundle
             npm run test:unit   # Unit tests (~60s)
+            CHROME_PATH=/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome npm run test:unit:components
+            npm run test:e2e    # E2E tests (auto-starts servers on ports 3000/3001)
             ```
 
             Fix any lint errors with: npm run lint:fix
+
+            If ports 3000 or 3001 are already in use before running E2E tests, free them first:
+            ```
+            fuser -k 3000/tcp 2>/dev/null; fuser -k 3001/tcp 2>/dev/null
+            ```
 
             ## Key project structure
             - src/map-generator/   — Core world generation algorithm

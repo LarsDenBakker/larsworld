@@ -158,66 +158,108 @@ function seedRandom(seed: number): () => number {
 
 
 /**
- * Calculate the flow direction based on elevation gradients and natural meandering
- * Returns the direction water would flow from this tile
+ * Calculate the flow direction for a river using gradient + meander angle.
+ *
+ * Key idea: compute the true downhill gradient direction, then rotate it by a
+ * smoothly-varying meander offset derived from low-frequency noise.  The
+ * meander amplitude is large on flat terrain (wide S-curves) and shrinks on
+ * steep slopes (river follows the valley).  Finally, snap the resulting angle
+ * to the nearest of the 8 discrete tile directions, only considering neighbors
+ * that are not significantly uphill.
  */
 function calculateFlowDirection(x: number, y: number, seed: number, prevDx?: number, prevDy?: number): { dx: number, dy: number } {
-  // Check all 8 neighboring directions for more natural flow
   const directions = [
-    { dx: 0, dy: -1 },  // North
-    { dx: 1, dy: -1 },  // Northeast
-    { dx: 1, dy: 0 },   // East
-    { dx: 1, dy: 1 },   // Southeast
-    { dx: 0, dy: 1 },   // South
-    { dx: -1, dy: 1 },  // Southwest
-    { dx: -1, dy: 0 },  // West
-    { dx: -1, dy: -1 }  // Northwest
+    { dx: 1,  dy: 0  },
+    { dx: 1,  dy: 1  },
+    { dx: 0,  dy: 1  },
+    { dx: -1, dy: 1  },
+    { dx: -1, dy: 0  },
+    { dx: -1, dy: -1 },
+    { dx: 0,  dy: -1 },
+    { dx: 1,  dy: -1 },
   ];
 
   const currentElevation = calculateLandStrengthAtChunk(x, y, seed);
-  let bestDirection = { dx: 0, dy: 0 };
-  let bestScore = -1;
 
-  // Use a lower frequency noise for smoother, longer-range meander curves
-  const riverNoise = getRiverNoiseGenerators(seed);
-  const meanderValue = riverNoise.meander.noise(x * 0.02, y * 0.02);
+  // Compute all 8 neighbour elevations once (reused for gradient + scoring).
+  const neighbourDrops: number[] = new Array(directions.length);
+  let gradX = 0;
+  let gradY = 0;
+  let maxDrop = 0;
 
   for (let i = 0; i < directions.length; i++) {
     const dir = directions[i];
-    const neighborX = x + dir.dx;
-    const neighborY = y + dir.dy;
-    const neighborElevation = calculateLandStrengthAtChunk(neighborX, neighborY, seed);
+    const neighbourElev = calculateLandStrengthAtChunk(x + dir.dx, y + dir.dy, seed);
+    const drop = currentElevation - neighbourElev;
+    neighbourDrops[i] = drop;
+    const weight = (dir.dx !== 0 && dir.dy !== 0) ? 0.707 : 1.0;
+    gradX += dir.dx * drop * weight;
+    gradY += dir.dy * drop * weight;
+    if (drop > maxDrop) maxDrop = drop;
+  }
 
-    const elevationDrop = currentElevation - neighborElevation;
+  // Dead end — local minimum with no downhill neighbour.
+  if (maxDrop <= 0 && Math.sqrt(gradX * gradX + gradY * gradY) < 1e-6) {
+    return { dx: 0, dy: 0 };
+  }
 
-    // Only consider downward flow
-    if (elevationDrop <= 0) continue;
+  // Downhill direction — used as a soft bias, not a hard constraint.
+  const gradMag = Math.sqrt(gradX * gradX + gradY * gradY);
+  const downhillAngle = gradMag > 1e-6
+    ? Math.atan2(gradY / gradMag, gradX / gradMag)
+    : (prevDx !== undefined ? Math.atan2(prevDy ?? 0, prevDx) : 0);
 
-    // Calculate flow score considering elevation drop and meandering
-    let flowScore = elevationDrop;
+  // -----------------------------------------------------------------------
+  // Multi-scale noise heading
+  //
+  // Four noise layers at different frequencies produce curves at every scale:
+  //
+  //   Layer 1 (0.008):  wide S-curves, period ~125 tiles  → ±126°
+  //   Layer 2 (0.025):  medium wobble, period  ~40 tiles  → ±72°
+  //   Layer 3 (0.10):   fine curves,   period  ~10 tiles  → ±72°
+  //   Layer 4 (0.22):   micro wiggles, period   ~5 tiles  → ±45°
+  //
+  // Layers 3 and 4 have short periods so they reliably cause direction
+  // changes every 3–6 tiles, preventing long straight runs even on flat
+  // terrain.  The downhill direction acts only as a soft bias.
+  // -----------------------------------------------------------------------
+  const riverNoise = getRiverNoiseGenerators(seed);
+  const h1 = riverNoise.meander.noise(x * 0.008, y * 0.008)    * Math.PI * 0.70;
+  const h2 = riverNoise.watershed.noise(x * 0.025, y * 0.025)  * Math.PI * 0.40;
+  const h3 = riverNoise.source.noise(x * 0.10,  y * 0.10)      * Math.PI * 0.60;
+  const h4 = riverNoise.drainage.noise(x * 0.25, y * 0.25)     * Math.PI * 0.45;
+  const noiseHeading = h1 + h2 + h3 + h4;
 
-    // Add slight preference for cardinal directions (more natural)
-    if (dir.dx === 0 || dir.dy === 0) {
-      flowScore *= 1.1;
-    }
+  const targetAngle = downhillAngle + noiseHeading;
 
-    // Add meandering influence based on direction index
-    const meanderInfluence = Math.sin(meanderValue * 8 + i) * 0.15;
-    flowScore += meanderInfluence;
+  // Allow a small uphill step so rivers can follow curves across nearly-flat
+  // ridges without getting stuck.
+  const uphillTolerance = 0.006;
 
-    // Add momentum: prefer directions that continue or gently curve from previous
-    if (prevDx !== undefined && prevDy !== undefined) {
-      const dot = dir.dx * prevDx + dir.dy * prevDy;
-      flowScore += dot * 0.18;
-    }
+  let bestDir = { dx: 0, dy: 0 };
+  let bestScore = -Infinity;
 
-    if (flowScore > bestScore) {
-      bestScore = flowScore;
-      bestDirection = dir;
+  for (let i = 0; i < directions.length; i++) {
+    const drop = neighbourDrops[i];
+    if (drop < -uphillTolerance) continue; // reject significant uphill
+
+    const dir = directions[i];
+    const dirAngle = Math.atan2(dir.dy, dir.dx);
+    const angleDiff = Math.atan2(
+      Math.sin(targetAngle - dirAngle),
+      Math.cos(targetAngle - dirAngle),
+    );
+
+    // Angular alignment dominates; small drop bonus prevents stalling.
+    const score = Math.cos(angleDiff) + drop * 0.5;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestDir = dir;
     }
   }
 
-  return bestDirection;
+  return bestDir;
 }
 
 /**
@@ -292,7 +334,7 @@ function getRiverSystemData(seed: number): RiverSystemData {
       }
     }
 
-    if (!tooClose && riverSources.length < 700) {
+    if (!tooClose && riverSources.length < 900) {
       riverSources.push({ x: candidate.x, y: candidate.y });
     }
   }

@@ -923,7 +923,7 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
   // Generate temperature based on latitude (using a reference for consistent patterns)
   const referenceHeight = 1000;
   const latitudeFactor = Math.abs((y / referenceHeight) - 0.5) * 2; // 0 at equator, 1 at poles
-  let temperature = 1 - latitudeFactor * 0.8; // Hot at equator, mild at poles (less extreme cold)
+  let temperature = 1 - latitudeFactor * 0.7; // Hot at equator, cool at poles (limits arctic to ~10-20%)
   temperature += noiseGenerators.temperature.octaveNoise(x * 0.008, y * 0.008, 3, 0.3) * 0.3;
   temperature -= elevation * 0.3; // Higher elevation = colder (reduced from 0.5 to avoid over-cooling mountains)
   temperature = Math.max(0, Math.min(1, temperature));

@@ -161,7 +161,7 @@ function seedRandom(seed: number): () => number {
  * Calculate the flow direction based on elevation gradients and natural meandering
  * Returns the direction water would flow from this tile
  */
-function calculateFlowDirection(x: number, y: number, seed: number): { dx: number, dy: number } {
+function calculateFlowDirection(x: number, y: number, seed: number, prevDx?: number, prevDy?: number): { dx: number, dy: number } {
   // Check all 8 neighboring directions for more natural flow
   const directions = [
     { dx: 0, dy: -1 },  // North
@@ -173,15 +173,15 @@ function calculateFlowDirection(x: number, y: number, seed: number): { dx: numbe
     { dx: -1, dy: 0 },  // West
     { dx: -1, dy: -1 }  // Northwest
   ];
-  
+
   const currentElevation = calculateLandStrengthAtChunk(x, y, seed);
   let bestDirection = { dx: 0, dy: 0 };
   let bestScore = -1;
-  
-  // Add some randomness for natural meandering using cached noise
+
+  // Use a lower frequency noise for smoother, longer-range meander curves
   const riverNoise = getRiverNoiseGenerators(seed);
-  const meanderValue = riverNoise.meander.noise(x * 0.05, y * 0.05);
-  
+  const meanderValue = riverNoise.meander.noise(x * 0.02, y * 0.02);
+
   for (let i = 0; i < directions.length; i++) {
     const dir = directions[i];
     const neighborX = x + dir.dx;
@@ -202,15 +202,21 @@ function calculateFlowDirection(x: number, y: number, seed: number): { dx: numbe
     }
 
     // Add meandering influence based on direction index
-    const meanderInfluence = Math.sin(meanderValue * 8 + i) * 0.1;
+    const meanderInfluence = Math.sin(meanderValue * 8 + i) * 0.15;
     flowScore += meanderInfluence;
-    
+
+    // Add momentum: prefer directions that continue or gently curve from previous
+    if (prevDx !== undefined && prevDy !== undefined) {
+      const dot = dir.dx * prevDx + dir.dy * prevDy;
+      flowScore += dot * 0.18;
+    }
+
     if (flowScore > bestScore) {
       bestScore = flowScore;
       bestDirection = dir;
     }
   }
-  
+
   return bestDirection;
 }
 
@@ -352,20 +358,22 @@ function generateRiverPath(startX: number, startY: number, seed: number, riverPa
   }
   
   // Follow elevation gradients to create river path
+  let prevDx: number | undefined;
+  let prevDy: number | undefined;
   for (let step = 0; step < maxLength; step++) {
     const key = `${currentX},${currentY}`;
-    
+
     // Stop if we've been here before (loop prevention)
     if (visited.has(key)) break;
     visited.add(key);
-    
+
     const elevation = calculateLandStrengthAtChunk(currentX, currentY, seed);
-    
+
     // Stop if we reach ocean
     if (elevation < 0.5) break;
-    
-    // Calculate flow direction
-    const flowDirection = calculateFlowDirection(currentX, currentY, seed);
+
+    // Calculate flow direction with momentum from previous step
+    const flowDirection = calculateFlowDirection(currentX, currentY, seed, prevDx, prevDy);
     
     // Stop if no clear flow direction (local minimum)
     if (flowDirection.dx === 0 && flowDirection.dy === 0) {
@@ -394,7 +402,9 @@ function generateRiverPath(startX: number, startY: number, seed: number, riverPa
       createLake(currentX, currentY, lakes, lakeSize, seed);
     }
     
-    // Move to next position
+    // Move to next position, tracking direction for momentum
+    prevDx = flowDirection.dx;
+    prevDy = flowDirection.dy;
     currentX += flowDirection.dx;
     currentY += flowDirection.dy;
   }

@@ -5,7 +5,6 @@
  */
 import { generateChunk, generateMapChunk, validateMapChunkRequest, clearGenerationCaches } from '../dist/src/map-generator/index.js';
 import { CHUNK_SIZE } from '../dist/src/shared/types.js';
-import { generateStableSeedPngs } from './stable-seed-pngs.js';
 
 
 
@@ -852,33 +851,11 @@ function testHashSeedConsistency() {
 }
 
 /**
- * Test stable seed PNG generation and integrate it into main test suite
- */
-async function testStableSeedPngs() {
-  try {
-    console.log('Generating stable seed PNG images (now part of test suite)...');
-    await generateStableSeedPngs();
-    
-    return {
-      name: 'Stable Seed PNG Generation',
-      passed: true,
-      message: 'Successfully generated PNG images for all stable seeds (elevation images removed)'
-    };
-  } catch (error) {
-    return {
-      name: 'Stable Seed PNG Generation',
-      passed: false,
-      message: `Error generating stable seed PNGs: ${error.message}`
-    };
-  }
-}
-
-/**
  * Run all unit tests
  */
 async function runAllTests() {
   console.log('Running World Generator Unit Tests (Chunk-Based Only)...\n');
-  
+
   const tests = [
     testTileTypes,
     testDeterministicGeneration,
@@ -891,7 +868,6 @@ async function runAllTests() {
     testMapRealism,
     testChunkBasedGeneration,
     testChunkOceanCoverage,
-    testStableSeedPngs
   ];
   
   const results = [];

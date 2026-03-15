@@ -1,11 +1,16 @@
 import { LitElement, html, css } from 'lit';
+import { state } from 'lit/decorators.js';
 import './world-generator.ts';
 import './app-legend.ts';
+
+type Screen = 'menu' | 'map-generator';
 
 /**
  * Main application component for LarsWorld
  */
 export class AppMain extends LitElement {
+  @state() private screen: Screen = 'menu';
+
   static styles = css`
     :host {
       display: block;
@@ -39,12 +44,73 @@ export class AppMain extends LitElement {
       font-weight: 300;
     }
 
+    /* Main menu styles */
+    .main-menu {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 4rem 2rem;
+      gap: 1.5rem;
+    }
+
+    .menu-button {
+      width: 260px;
+      padding: 1rem 2rem;
+      font-size: 1.2rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+
+    .menu-button:not(:disabled):hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+    }
+
+    .menu-button:not(:disabled):active {
+      transform: translateY(0);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    .menu-button.primary {
+      background: white;
+      color: #764ba2;
+    }
+
+    .menu-button:disabled {
+      background: rgba(255, 255, 255, 0.3);
+      color: rgba(255, 255, 255, 0.5);
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    /* Back button */
+    .back-button {
+      background: none;
+      border: 2px solid rgba(255,255,255,0.6);
+      color: white;
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      margin: 1rem 0 0 1.5rem;
+      transition: background 0.1s ease;
+    }
+
+    .back-button:hover {
+      background: rgba(255,255,255,0.15);
+    }
+
     @media (max-width: 768px) {
       h1 {
         font-size: 2rem;
         padding: 1rem 0 0.5rem 0;
       }
-      
+
       .subtitle {
         font-size: 1rem;
         margin: 0 0 1rem 0;
@@ -52,15 +118,43 @@ export class AppMain extends LitElement {
     }
   `;
 
+  private _goToMapGenerator() {
+    this.screen = 'map-generator';
+  }
+
+  private _goToMenu() {
+    this.screen = 'menu';
+  }
+
   render() {
     return html`
       <div class="container">
         <h1>LarsWorld</h1>
-        <p class="subtitle">Chunk-Based World Generator</p>
-        
-        <world-generator></world-generator>
-        <app-legend></app-legend>
+        ${this.screen === 'menu' ? this._renderMenu() : this._renderMapGenerator()}
       </div>
+    `;
+  }
+
+  private _renderMenu() {
+    return html`
+      <p class="subtitle">What would you like to do?</p>
+      <div class="main-menu">
+        <button class="menu-button primary" @click=${this._goToMapGenerator}>
+          Map Generator
+        </button>
+        <button class="menu-button" disabled>
+          New Game (coming soon)
+        </button>
+      </div>
+    `;
+  }
+
+  private _renderMapGenerator() {
+    return html`
+      <button class="back-button" @click=${this._goToMenu}>← Back to menu</button>
+      <p class="subtitle">Chunk-Based World Generator</p>
+      <world-generator></world-generator>
+      <app-legend></app-legend>
     `;
   }
 }

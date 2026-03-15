@@ -49,22 +49,28 @@ jobs:
             ## Project Setup
             Dependencies are already installed. The project uses Node.js 18.
 
-            ## Required checks before committing
-            Run these in order — all must pass:
+            ## Quality bar — the project must be in a clean, working state before you commit
+            - No lint errors, no TypeScript errors, no test failures
+            - The project must build and run correctly end-to-end
+            - All code you touch must match the surrounding style and conventions
+            - Fix any code style issues, anti-patterns, or bugs you introduce or encounter in files you change
+            - Do not leave console.log statements, dead code, or TODO comments behind
+
+            ## Required checks — run in order, all must pass
             ```
-            npm run lint        # ESLint — must have 0 errors
+            npm run lint        # ESLint — 0 errors required; auto-fix with: npm run lint:fix
             npm run build       # TypeScript compilation + rollup bundle
             npm run test:unit   # Unit tests (~60s)
             CHROME_PATH=/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome npm run test:unit:components
-            npm run test:e2e    # E2E tests (auto-starts servers on ports 3000/3001)
+            npm run test:e2e    # E2E Playwright tests (auto-starts servers on ports 3000/3001)
             ```
 
-            Fix any lint errors with: npm run lint:fix
-
-            If ports 3000 or 3001 are already in use before running E2E tests, free them first:
+            If ports 3000 or 3001 are in use before E2E tests, free them first:
             ```
             fuser -k 3000/tcp 2>/dev/null; fuser -k 3001/tcp 2>/dev/null
             ```
+
+            If any check fails, fix the root cause — do not skip or work around checks.
 
             ## Key project structure
             - src/map-generator/   — Core world generation algorithm
@@ -78,10 +84,10 @@ jobs:
             2. Run npm run test:generate-pngs to regenerate reference images
             3. Commit the updated test/map-images/ files
 
-            ## Style
-            - TypeScript throughout (strict types)
-            - ESLint enforced — run lint:fix if needed
-            - Keep changes focused and minimal
+            ## Code style
+            - TypeScript throughout with strict types — no `any` unless unavoidable
+            - ESLint enforced — run lint:fix after changes
+            - Keep changes focused and minimal; don't refactor unrelated code
             - Write clear, descriptive commit messages
 
           # Allow Claude to run project commands

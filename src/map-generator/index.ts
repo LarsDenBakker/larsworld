@@ -930,12 +930,14 @@ function generateTileAtChunk(x: number, y: number, seed: number): Tile {
   // Clamp elevation to valid range
   elevation = Math.max(0, Math.min(1, elevation));
   
-  // Generate temperature based on latitude (using a reference for consistent patterns)
+  // Generate temperature based on latitude - equator at y=500 (center of continent reference area)
+  // Reduced polar cooling (0.55 vs original 0.70) limits cold biomes to 5-20% of land tiles
   const referenceHeight = 1000;
-  const latitudeFactor = Math.abs((y / referenceHeight) - 0.5) * 2; // 0 at equator, 1 at poles
-  let temperature = 1 - latitudeFactor * 0.7; // Hot at equator, cool at poles (limits arctic to ~10-20%)
-  temperature += noiseGenerators.temperature.octaveNoise(x * 0.008, y * 0.008, 3, 0.3) * 0.3;
-  temperature -= elevation * 0.3; // Higher elevation = colder (reduced from 0.5 to avoid over-cooling mountains)
+  const latitudeFactor = Math.abs((y / referenceHeight) - 0.5) * 2; // 0 at equator (y=500), 1 at poles (y=0, y=1000)
+  let temperature = 1 - latitudeFactor * 0.65; // Base range: 0.35 (poles) to 1.0 (equator)
+  // Higher persistence (0.5) adds variation at multiple scales for more diverse biome patches
+  temperature += noiseGenerators.temperature.octaveNoise(x * 0.008, y * 0.008, 3, 0.5) * 0.40;
+  temperature -= elevation * 0.22; // Higher elevation = colder
   temperature = Math.max(0, Math.min(1, temperature));
   
   // Generate moisture patterns (same as generateMap)

@@ -851,6 +851,95 @@ function testHashSeedConsistency() {
 }
 
 /**
+ * Test that cold biomes (arctic, tundra, alpine, taiga) comprise 5-20% of land tiles.
+ * Uses the same 60×60 chunk area as the ocean coverage test.
+ * Hard limit: no seed may exceed 20% cold biome coverage.
+ */
+function testBiomeDistribution() {
+  try {
+    console.log('Testing biome distribution (cold biomes 5-20%)...');
+
+    const testCases = [
+      { seed: 12345 },
+      { seed: 54321 },
+      { seed: 77777 },
+      { seed: 98765 },
+      { seed: 42424 },
+      { seed: 11111 },
+      { seed: 27182 },
+      { seed: 31415 },
+      { seed: 13579 },
+      { seed: 24680 },
+    ];
+
+    const COLD_BIOMES = new Set(['arctic', 'tundra', 'alpine', 'taiga']);
+    const chunksPerSide = 60;
+
+    const results = [];
+    let withinSpecCount = 0;
+
+    for (const { seed } of testCases) {
+      const biomeCounts = {};
+      let totalLand = 0;
+
+      for (let chunkY = 0; chunkY < chunksPerSide; chunkY++) {
+        for (let chunkX = 0; chunkX < chunksPerSide; chunkX++) {
+          const chunk = generateChunk(chunkX, chunkY, seed);
+          for (let y = 0; y < CHUNK_SIZE; y++) {
+            for (let x = 0; x < CHUNK_SIZE; x++) {
+              const tile = chunk[y][x];
+              if (tile.type === 'land') {
+                totalLand++;
+                biomeCounts[tile.biome] = (biomeCounts[tile.biome] || 0) + 1;
+              }
+            }
+          }
+        }
+      }
+
+      const coldCount = Object.entries(biomeCounts)
+        .filter(([biome]) => COLD_BIOMES.has(biome))
+        .reduce((sum, [, count]) => sum + count, 0);
+
+      const coldPct = totalLand > 0 ? (coldCount / totalLand) * 100 : 0;
+      const withinSpec = coldPct >= 5 && coldPct <= 20;
+      if (withinSpec) withinSpecCount++;
+
+      console.log(`  Seed ${seed}: ${coldPct.toFixed(1)}% cold biomes ${withinSpec ? '✓' : '✗'}`);
+      results.push({ seed, coldPct: coldPct.toFixed(1), withinSpec });
+    }
+
+    // Hard limit: no seed may exceed 20%
+    const exceedsHardLimit = results.filter(r => parseFloat(r.coldPct) > 20);
+    if (exceedsHardLimit.length > 0) {
+      return {
+        name: 'Biome Distribution (5-20% cold)',
+        passed: false,
+        message: `${exceedsHardLimit.length} seed(s) exceed the 20% cold biome hard limit: ${exceedsHardLimit.map(r => `seed ${r.seed}: ${r.coldPct}%`).join(', ')}`,
+        details: { results, withinSpecCount, total: testCases.length }
+      };
+    }
+
+    // All seeds must be in the 5-20% range
+    const passed = withinSpecCount === testCases.length;
+    return {
+      name: 'Biome Distribution (5-20% cold)',
+      passed,
+      message: passed
+        ? `All ${testCases.length} seeds have cold biomes within 5-20% range`
+        : `${testCases.length - withinSpecCount} seed(s) outside 5-20% range`,
+      details: { results, withinSpecCount, total: testCases.length }
+    };
+  } catch (error) {
+    return {
+      name: 'Biome Distribution (5-20% cold)',
+      passed: false,
+      message: `Error: ${error.message}`
+    };
+  }
+}
+
+/**
  * Run all unit tests
  */
 async function runAllTests() {
@@ -868,6 +957,7 @@ async function runAllTests() {
     testMapRealism,
     testChunkBasedGeneration,
     testChunkOceanCoverage,
+    testBiomeDistribution,
   ];
   
   const results = [];

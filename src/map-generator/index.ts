@@ -247,38 +247,38 @@ function getRiverSystemData(seed: number): RiverSystemData {
   // Generate river sources with proper spacing
   const random = seedRandom(seed + 9999);
   const riverNoise = getRiverNoiseGenerators(seed);
-  
-  // Use a much larger reference area to cover any potential chunk generation
-  const refWidth = 5000;
-  const refHeight = 5000;
-  const refOffsetX = -2500; // Center the reference area around origin
-  const refOffsetY = -2500;
-  const minSourceSpacing = 60; // Reduced from 80 to increase river frequency
-  
+
+  // Reference area covers the typical gameplay region (2000x2000 tiles centered at origin)
+  const refWidth = 2000;
+  const refHeight = 2000;
+  const refOffsetX = -1000;
+  const refOffsetY = -1000;
+  const minSourceSpacing = 8; // Tight spacing to achieve 5-15% river density target
+
   // Scan for potential river sources in high-elevation areas
   const potentialSources: Array<{x: number, y: number, suitability: number}> = [];
-  
-  for (let y = refOffsetY; y < refOffsetY + refHeight; y += 12) { // Reduced from 15 to increase density
-    for (let x = refOffsetX; x < refOffsetX + refWidth; x += 12) {
+
+  for (let y = refOffsetY; y < refOffsetY + refHeight; y += 5) {
+    for (let x = refOffsetX; x < refOffsetX + refWidth; x += 5) {
       const elevation = calculateLandStrengthAtChunk(x, y, seed);
-      
+
       // Only consider land tiles at higher elevations
-      if (elevation < 0.52) continue; // Lowered threshold from 0.54 to increase sources
-      
+      if (elevation < 0.52) continue;
+
       // Calculate suitability based on elevation and local terrain
       const relativeElevation = (elevation - 0.5) / 0.5; // 0-1 within land range
       const sourceNoise = riverNoise.source.octaveNoise(x * 0.006, y * 0.006, 3, 0.6);
       const suitability = relativeElevation * 0.7 + (sourceNoise + 1) * 0.15;
-      
-      if (suitability > 0.4) { // Lower suitability threshold to get more sources
+
+      if (suitability > 0.4) {
         potentialSources.push({ x, y, suitability });
       }
     }
   }
-  
+
   // Sort by suitability and select sources with spacing constraints
   potentialSources.sort((a, b) => b.suitability - a.suitability);
-  
+
   for (const candidate of potentialSources) {
     // Check spacing constraint
     let tooClose = false;
@@ -291,8 +291,8 @@ function getRiverSystemData(seed: number): RiverSystemData {
         break;
       }
     }
-    
-    if (!tooClose && riverSources.length < 60) { // Increased from 40 to allow more rivers
+
+    if (!tooClose && riverSources.length < 700) {
       riverSources.push({ x: candidate.x, y: candidate.y });
     }
   }
@@ -507,15 +507,26 @@ function generateRiverPath(startX: number, startY: number, seed: number, riverPa
         
         // Determine bend type based on incoming and outgoing directions
         const bendKey = `${inCompass}_${outCompass}`;
+        // Bend map: inCompass is the direction water flows INTO the tile
+        // (opposite of the entry side). outCompass is the exit direction.
+        // bend_XY means water enters from side X and exits to side Y.
+        // inCompass 'S' (flowing south) means water entered from the North side.
         const bendMap: Record<string, RiverType> = {
-          'S_E': 'bend_se', 'E_S': 'bend_se',
-          'S_W': 'bend_sw', 'W_S': 'bend_sw',
-          'N_E': 'bend_ne', 'E_N': 'bend_ne',
-          'N_W': 'bend_nw', 'W_N': 'bend_nw',
-          'SE_E': 'bend_se', 'E_SE': 'bend_se',
-          'SW_W': 'bend_sw', 'W_SW': 'bend_sw',
-          'NE_E': 'bend_ne', 'E_NE': 'bend_ne',
-          'NW_W': 'bend_nw', 'W_NW': 'bend_nw',
+          // Cardinal-to-cardinal bends (all 8 directional types)
+          'S_E': 'bend_ne',  // from N (flowing S), exits E
+          'S_W': 'bend_nw',  // from N (flowing S), exits W
+          'N_E': 'bend_se',  // from S (flowing N), exits E
+          'N_W': 'bend_sw',  // from S (flowing N), exits W
+          'W_N': 'bend_en',  // from E (flowing W), exits N
+          'W_S': 'bend_es',  // from E (flowing W), exits S
+          'E_N': 'bend_wn',  // from W (flowing E), exits N
+          'E_S': 'bend_ws',  // from W (flowing E), exits S
+          // Diagonal approximations
+          'SE_E': 'bend_ne', 'E_SE': 'bend_es',
+          'SW_W': 'bend_nw', 'W_SW': 'bend_ws',
+          'NE_E': 'bend_se', 'E_NE': 'bend_wn',
+          'NW_W': 'bend_sw', 'W_NW': 'bend_en',
+          // Straight through
           'N_S': 'vertical', 'S_N': 'vertical',
           'E_W': 'horizontal', 'W_E': 'horizontal'
         };
@@ -524,7 +535,11 @@ function generateRiverPath(startX: number, startY: number, seed: number, riverPa
       }
     }
     
-    riverPaths.set(key, riverType);
+    // Confluence: only claim tiles not already owned by another river (first-claim wins).
+    // This naturally creates tributary systems where smaller streams merge into main rivers.
+    if (!riverPaths.has(key)) {
+      riverPaths.set(key, riverType);
+    }
   }
 }
 

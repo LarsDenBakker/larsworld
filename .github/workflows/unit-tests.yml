@@ -33,6 +33,9 @@ jobs:
     - name: Run unit tests
       run: npm run test:unit
 
+    - name: Generate stable seed PNG images
+      run: npm run test:generate-pngs
+
     - name: Verify stable seed PNG images are up-to-date
       run: npm run test:verify-pngs
 

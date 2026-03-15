@@ -290,52 +290,53 @@ function getRiverSystemData(seed: number): RiverSystemData {
   const random = seedRandom(seed + 9999);
   const riverNoise = getRiverNoiseGenerators(seed);
 
-  // Reference area covers the typical gameplay region (2000x2000 tiles centered at origin)
-  const refWidth = 2000;
-  const refHeight = 2000;
-  const refOffsetX = -1000;
-  const refOffsetY = -1000;
-  const minSourceSpacing = 8; // Tight spacing to achieve 5-15% river density target
+  // Reference area matches the standard 60×60 chunk map (960×960 tiles) starting at origin.
+  // Starting at (0,0) ensures rivers cover the entire visible map rather than clustering
+  // where the old centred reference area partially overlapped the visible area.
+  const refWidth = 960;
+  const refHeight = 960;
+  const refOffsetX = 0;
+  const refOffsetY = 0;
 
-  // Scan for potential river sources in high-elevation areas
-  const potentialSources: Array<{x: number, y: number, suitability: number}> = [];
+  // Grid-based source placement: divide the map into fixed cells and pick the best
+  // qualifying land tile within each cell. This guarantees geographic spread — one
+  // river network per cell — instead of all sources concentrating at mountain peaks.
+  const gridSize = 48; // one river candidate per 48×48-tile cell (~20×20 grid = 400 cells max)
+  const maxSources = 180;
 
-  for (let y = refOffsetY; y < refOffsetY + refHeight; y += 5) {
-    for (let x = refOffsetX; x < refOffsetX + refWidth; x += 5) {
-      const elevation = calculateLandStrengthAtChunk(x, y, seed);
+  outer: for (let gy = 0; gy * gridSize < refHeight; gy++) {
+    for (let gx = 0; gx * gridSize < refWidth; gx++) {
+      if (riverSources.length >= maxSources) break outer;
 
-      // Only consider land tiles at higher elevations
-      if (elevation < 0.52) continue;
+      const cellX = refOffsetX + gx * gridSize;
+      const cellY = refOffsetY + gy * gridSize;
+      let bestX = -1, bestY = -1, bestSuit = -Infinity;
 
-      // Calculate suitability based on elevation and local terrain
-      const relativeElevation = (elevation - 0.5) / 0.5; // 0-1 within land range
-      const sourceNoise = riverNoise.source.octaveNoise(x * 0.006, y * 0.006, 3, 0.6);
-      const suitability = relativeElevation * 0.7 + (sourceNoise + 1) * 0.15;
+      // Sample within this cell (5-tile step) to find the best qualifying position
+      for (let dy = 0; dy < gridSize; dy += 5) {
+        for (let dx = 0; dx < gridSize; dx += 5) {
+          const x = cellX + dx;
+          const y = cellY + dy;
+          if (x >= refOffsetX + refWidth || y >= refOffsetY + refHeight) continue;
 
-      if (suitability > 0.4) {
-        potentialSources.push({ x, y, suitability });
+          const elevation = calculateLandStrengthAtChunk(x, y, seed);
+          // Require elevation well above ocean so rivers flow a meaningful distance
+          if (elevation < 0.55) continue;
+
+          const relativeElevation = (elevation - 0.5) / 0.5;
+          const sourceNoise = riverNoise.source.octaveNoise(x * 0.006, y * 0.006, 3, 0.6);
+          const suitability = relativeElevation * 0.7 + (sourceNoise + 1) * 0.15;
+          if (suitability > bestSuit) {
+            bestSuit = suitability;
+            bestX = x;
+            bestY = y;
+          }
+        }
       }
-    }
-  }
 
-  // Sort by suitability and select sources with spacing constraints
-  potentialSources.sort((a, b) => b.suitability - a.suitability);
-
-  for (const candidate of potentialSources) {
-    // Check spacing constraint
-    let tooClose = false;
-    for (const existing of riverSources) {
-      const dx = candidate.x - existing.x;
-      const dy = candidate.y - existing.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      if (distance < minSourceSpacing) {
-        tooClose = true;
-        break;
+      if (bestX >= 0) {
+        riverSources.push({ x: bestX, y: bestY });
       }
-    }
-
-    if (!tooClose && riverSources.length < 900) {
-      riverSources.push({ x: candidate.x, y: candidate.y });
     }
   }
   

@@ -156,6 +156,27 @@ function seedRandom(seed: number): () => number {
 
 
 
+/**
+ * Pre-computed 8 cardinal+diagonal flow directions and their unit vectors.
+ * Using module-level constants avoids rebuilding the array on every call.
+ * cos/sin values are exact: diagonals use 1/√2; axis-aligned are 0 or ±1.
+ */
+const FLOW_DIRECTIONS = [
+  { dx: 1,  dy: 0  },
+  { dx: 1,  dy: 1  },
+  { dx: 0,  dy: 1  },
+  { dx: -1, dy: 1  },
+  { dx: -1, dy: 0  },
+  { dx: -1, dy: -1 },
+  { dx: 0,  dy: -1 },
+  { dx: 1,  dy: -1 },
+] as const;
+
+const INV_SQRT2 = 1 / Math.SQRT2;
+// cos(atan2(dy, dx)) for each direction above
+const FLOW_DIR_COS = [ 1,  INV_SQRT2, 0, -INV_SQRT2, -1, -INV_SQRT2,  0,  INV_SQRT2];
+// sin(atan2(dy, dx)) for each direction above
+const FLOW_DIR_SIN = [ 0,  INV_SQRT2, 1,  INV_SQRT2,  0, -INV_SQRT2, -1, -INV_SQRT2];
 
 /**
  * Calculate the flow direction for a river using gradient + meander angle.
@@ -168,16 +189,7 @@ function seedRandom(seed: number): () => number {
  * that are not significantly uphill.
  */
 function calculateFlowDirection(x: number, y: number, seed: number, prevDx?: number, prevDy?: number): { dx: number, dy: number } {
-  const directions = [
-    { dx: 1,  dy: 0  },
-    { dx: 1,  dy: 1  },
-    { dx: 0,  dy: 1  },
-    { dx: -1, dy: 1  },
-    { dx: -1, dy: 0  },
-    { dx: -1, dy: -1 },
-    { dx: 0,  dy: -1 },
-    { dx: 1,  dy: -1 },
-  ];
+  const directions = FLOW_DIRECTIONS;
 
   const currentElevation = calculateLandStrengthAtChunk(x, y, seed);
 
@@ -239,23 +251,22 @@ function calculateFlowDirection(x: number, y: number, seed: number, prevDx?: num
   let bestDir = { dx: 0, dy: 0 };
   let bestScore = -Infinity;
 
+  // Pre-compute cos/sin of targetAngle once so the inner loop uses only
+  // multiplications instead of atan2+cos per direction (16× atan2 → 2).
+  // cos(targetAngle - dirAngle) = cos(tgt)*cos(dir) + sin(tgt)*sin(dir)
+  const cosTgt = Math.cos(targetAngle);
+  const sinTgt = Math.sin(targetAngle);
+
   for (let i = 0; i < directions.length; i++) {
     const drop = neighbourDrops[i];
     if (drop < -uphillTolerance) continue; // reject significant uphill
 
-    const dir = directions[i];
-    const dirAngle = Math.atan2(dir.dy, dir.dx);
-    const angleDiff = Math.atan2(
-      Math.sin(targetAngle - dirAngle),
-      Math.cos(targetAngle - dirAngle),
-    );
-
     // Angular alignment dominates; small drop bonus prevents stalling.
-    const score = Math.cos(angleDiff) + drop * 0.5;
+    const score = cosTgt * FLOW_DIR_COS[i] + sinTgt * FLOW_DIR_SIN[i] + drop * 0.5;
 
     if (score > bestScore) {
       bestScore = score;
-      bestDir = dir;
+      bestDir = directions[i];
     }
   }
 
@@ -756,6 +767,14 @@ interface ContinentData {
 const continentCache = new Map<number, ContinentData>();
 
 /**
+ * Per-seed elevation cache for calculateLandStrengthAtChunk.
+ * During river generation each step evaluates 9 neighbours, many of which
+ * are shared with adjacent steps.  Caching the result by coordinate cuts
+ * the vast majority of redundant octaveNoise evaluations.
+ */
+const elevationCache = new Map<number, Map<string, number>>();
+
+/**
  * Get or create cached continent data for a seed
  */
 function getContinentData(seed: number): ContinentData {
@@ -833,9 +852,22 @@ function getContinentData(seed: number): ContinentData {
 }
 
 /**
- * Optimized land strength calculation using cached continent data
+ * Optimized land strength calculation using cached continent data.
+ * Results are memoised per seed+coordinate to avoid redundant noise evaluation
+ * during river path tracing (where 9 neighbours are re-queried each step).
  */
 function calculateLandStrengthAtChunk(x: number, y: number, seed: number): number {
+  // Fast coordinate-level cache lookup
+  let seedElevCache = elevationCache.get(seed);
+  const key = `${x},${y}`;
+  if (seedElevCache !== undefined) {
+    const cached = seedElevCache.get(key);
+    if (cached !== undefined) return cached;
+  } else {
+    seedElevCache = new Map<string, number>();
+    elevationCache.set(seed, seedElevCache);
+  }
+
   // Use cached continent data
   const continentData = getContinentData(seed);
   const { centers, noiseGenerators } = continentData;
@@ -884,15 +916,19 @@ function calculateLandStrengthAtChunk(x: number, y: number, seed: number): numbe
   // Direct threshold for ocean coverage
   const oceanThreshold = 0.495;
   
+  let result: number;
   if (elevation < oceanThreshold) {
     // Ocean: scale from 0.1 to 0.49
     const oceanPosition = elevation / oceanThreshold;
-    return 0.1 + oceanPosition * 0.39;
+    result = 0.1 + oceanPosition * 0.39;
   } else {
     // Land: scale from 0.51 to 1.0
     const landPosition = (elevation - oceanThreshold) / (1 - oceanThreshold);
-    return 0.51 + landPosition * 0.49;
+    result = 0.51 + landPosition * 0.49;
   }
+
+  seedElevCache!.set(key, result);
+  return result;
 }
 
 /**
@@ -1038,6 +1074,7 @@ export function clearGenerationCaches(): void {
   tileNoiseCache.clear();
   riverNoiseCache.clear();
   riverSystemCache.clear();
+  elevationCache.clear();
 }
 
 /**
